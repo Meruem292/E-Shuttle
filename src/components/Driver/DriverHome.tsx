@@ -10,6 +10,8 @@ import {
   Zap,
   Phone,
   Bike,
+  Info,
+  X,
 } from 'lucide-react';
 import {
   listenToNearbySearchingBookings,
@@ -35,6 +37,7 @@ export const DriverHome: React.FC = () => {
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [statusUpdating, setStatusUpdating] = useState<boolean>(false);
+  const [showInfoTooltip, setShowInfoTooltip] = useState<boolean>(false);
 
   // Sync driver profile state
   useEffect(() => {
@@ -221,9 +224,14 @@ export const DriverHome: React.FC = () => {
   return (
     <div className="relative w-full h-full flex flex-col bg-[#E3F2FD] overflow-hidden select-none">
       {/* Top Driver Header Bar */}
-      <div className="absolute top-0 left-0 right-0 z-20 p-4 pointer-events-none">
-        <div className="flex items-center justify-between pointer-events-auto max-w-md mx-auto">
-          <div className="flex items-center gap-2.5 bg-white/95 border-2 border-[#0D47A1] backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-lg">
+      <div className="absolute top-0 left-0 right-0 z-20 p-3 pointer-events-none">
+        <div className="flex items-center justify-between gap-2 pointer-events-auto max-w-md mx-auto w-full">
+          {/* Driver Profile & Status Pill (Click/Tap for Full Details Tooltip) */}
+          <div
+            onClick={() => setShowInfoTooltip((prev) => !prev)}
+            title="Tap to view vehicle, zone & RFID details"
+            className="flex items-center gap-2 bg-white/95 border-2 border-[#0D47A1] backdrop-blur-md px-3 py-1.5 rounded-full shadow-lg min-w-0 flex-1 cursor-pointer hover:bg-slate-50 transition-all active:scale-[0.98]"
+          >
             <img
               src={officialLogo}
               onError={(e) => {
@@ -232,25 +240,26 @@ export const DriverHome: React.FC = () => {
               alt="E-Shuttle Official Logo"
               className="w-7 h-7 rounded-full object-cover border border-[#0D47A1] shrink-0"
             />
-            <div>
-              <h1 className="text-xs font-black text-[#0D47A1] leading-none">{driverProfile?.fullName || 'Driver'}</h1>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <p className="text-[10px] text-[#0D47A1] font-bold truncate max-w-[120px]">
-                  {sanitizeVehicleInfo(driverProfile?.vehicleInfo)}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1">
+                <h1 className="text-xs font-black text-[#0D47A1] leading-none truncate">
+                  {driverProfile?.fullName || 'Driver'}
+                </h1>
+                <Info className="w-3 h-3 text-[#0D47A1]/70 shrink-0" />
+              </div>
+              <div className="flex items-center gap-1 mt-0.5">
+                <p className="text-[10px] text-[#0D47A1] font-bold truncate">
+                  {driverProfile?.zoneName
+                    ? `📍 ${driverProfile.zoneName}`
+                    : sanitizeVehicleInfo(driverProfile?.vehicleInfo)}
                 </p>
-                {driverProfile?.zoneName && (
-                  <span className="text-[8px] font-black bg-[#0D47A1] text-white px-1.5 py-0.5 rounded uppercase">
-                    📍 {driverProfile.zoneName}
-                  </span>
-                )}
                 {driverProfile?.activeEbikeId ? (
-                  <span className="text-[8px] font-black bg-[#E3F2FD] text-[#0D47A1] border border-[#0D47A1] px-1.5 py-0.2 rounded uppercase flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 bg-[#0D47A1] rounded-full animate-pulse"></span>
-                    <span>GPS LINKED</span>
+                  <span className="text-[8px] font-black bg-[#E3F2FD] text-[#0D47A1] border border-[#0D47A1] px-1 rounded uppercase shrink-0">
+                    GPS
                   </span>
                 ) : (
-                  <span className="text-[8px] font-bold bg-amber-50 text-amber-800 border border-amber-300 px-1.5 py-0.2 rounded uppercase">
-                    SWIPE RFID
+                  <span className="text-[8px] font-bold bg-amber-50 text-amber-800 border border-amber-300 px-1 rounded uppercase shrink-0">
+                    RFID
                   </span>
                 )}
               </div>
@@ -261,7 +270,7 @@ export const DriverHome: React.FC = () => {
           <button
             onClick={handleToggleOnline}
             disabled={availability === 'BUSY'}
-            className={`px-4 py-2 rounded-full font-black text-xs shadow-lg backdrop-blur transition-transform active:scale-95 uppercase flex items-center gap-1.5 border-2 ${
+            className={`shrink-0 px-3.5 py-1.5 rounded-full font-black text-xs shadow-lg backdrop-blur transition-transform active:scale-95 uppercase flex items-center gap-1.5 border-2 ${
               availability === 'ONLINE'
                 ? 'bg-emerald-600 text-white border-emerald-700'
                 : availability === 'BUSY'
@@ -269,10 +278,64 @@ export const DriverHome: React.FC = () => {
                 : 'bg-white text-[#0D47A1] border-[#0D47A1]'
             }`}
           >
-            <Power className="w-3.5 h-3.5" />
+            <Power className="w-3.5 h-3.5 shrink-0" />
             <span>{availability}</span>
           </button>
         </div>
+
+        {/* Floating Interactive Tooltip Popover */}
+        {showInfoTooltip && (
+          <div className="mt-2.5 pointer-events-auto max-w-md mx-auto bg-white border-2 border-[#0D47A1] rounded-2xl p-3.5 shadow-2xl text-xs space-y-2.5 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-[#0D47A1]/20 pb-2">
+              <div className="flex items-center gap-1.5 font-black text-[#0D47A1]">
+                <Info className="w-4 h-4 text-[#0D47A1]" />
+                <span>Vehicle & Operating Zone Details</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowInfoTooltip(false)}
+                className="p-1 text-slate-400 hover:text-[#0D47A1] hover:bg-[#E3F2FD] rounded-lg transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-1.5 text-slate-700">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-500 text-[10px] uppercase">Driver Name:</span>
+                <span className="font-black text-[#0D47A1]">{driverProfile?.fullName || 'Driver'}</span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-500 text-[10px] uppercase">Assigned Vehicle:</span>
+                <span className="font-bold text-[#0D47A1]">
+                  {sanitizeVehicleInfo(driverProfile?.vehicleInfo)}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-500 text-[10px] uppercase">Operational Zone:</span>
+                <span className="font-bold text-[#0D47A1] flex items-center gap-1">
+                  {driverProfile?.zoneName ? `📍 ${driverProfile.zoneName}` : 'All Operational Zones'}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between pt-1.5 border-t border-slate-100">
+                <span className="font-bold text-slate-500 text-[10px] uppercase">Hardware Linking:</span>
+                {driverProfile?.activeEbikeId ? (
+                  <span className="text-[10px] font-black bg-[#E3F2FD] text-[#0D47A1] border border-[#0D47A1] px-2 py-0.5 rounded-md flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 bg-[#0D47A1] rounded-full animate-pulse"></span>
+                    <span>GPS LINKED</span>
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300 px-2 py-0.5 rounded-md">
+                    SWIPE RFID CARD TO LINK
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Main Map View */}
