@@ -1,0 +1,110 @@
+{
+  "entities": {
+    "users": {
+      "fields": {
+        "uid": { "type": "string", "description": "User UID" },
+        "role": { "type": "string", "description": "Role: customer or admin" },
+        "fullName": { "type": "string", "description": "Full Name" },
+        "email": { "type": "string", "description": "Email address" },
+        "phone": { "type": "string", "description": "Phone number" },
+        "photoURL": { "type": "string", "description": "Avatar URL" },
+        "accountStatus": { "type": "string", "description": "Account status" },
+        "createdAt": { "type": "timestamp", "description": "Created time" },
+        "updatedAt": { "type": "timestamp", "description": "Updated time" }
+      }
+    },
+    "drivers": {
+      "fields": {
+        "uid": { "type": "string", "description": "Driver UID" },
+        "role": { "type": "string", "description": "Role: driver" },
+        "fullName": { "type": "string", "description": "Full Name" },
+        "email": { "type": "string", "description": "Email" },
+        "phone": { "type": "string", "description": "Phone number" },
+        "photoURL": { "type": "string", "description": "Avatar URL" },
+        "accountStatus": { "type": "string", "description": "PENDING, APPROVED, REJECTED, SUSPENDED" },
+        "availability": { "type": "string", "description": "OFFLINE, ONLINE, BUSY" },
+        "vehicleType": { "type": "string", "description": "e.g. E-Bike Shuttle" },
+        "vehicleInfo": { "type": "string", "description": "Model and Plate/Serial" },
+        "currentLocation": { "type": "map", "description": "lat, lng, address, updatedAt" },
+        "activeBookingId": { "type": "string", "description": "Active booking ID if busy" },
+        "rating": { "type": "number", "description": "Average rating" },
+        "totalRides": { "type": "number", "description": "Total rides completed" },
+        "createdAt": { "type": "timestamp", "description": "Created time" },
+        "updatedAt": { "type": "timestamp", "description": "Updated time" }
+      }
+    },
+    "bookings": {
+      "fields": {
+        "customerId": { "type": "string", "description": "Customer UID" },
+        "customerName": { "type": "string", "description": "Customer Name" },
+        "customerPhone": { "type": "string", "description": "Customer Phone" },
+        "driverId": { "type": "string", "description": "Assigned Driver UID" },
+        "driverName": { "type": "string", "description": "Driver Name" },
+        "driverPhone": { "type": "string", "description": "Driver Phone" },
+        "driverVehicleInfo": { "type": "string", "description": "Driver Vehicle info" },
+        "status": { "type": "string", "description": "SEARCHING, DRIVER_ASSIGNED, DRIVER_ARRIVING, DRIVER_ARRIVED, RIDE_STARTED, COMPLETED, CANCELLED" },
+        "pickup": { "type": "map", "description": "latitude, longitude, address" },
+        "destination": { "type": "map", "description": "latitude, longitude, address" },
+        "distanceKm": { "type": "number", "description": "Distance in Km" },
+        "estimatedDurationMinutes": { "type": "number", "description": "Duration in mins" },
+        "estimatedFare": { "type": "number", "description": "Fare in local currency PHP" },
+        "createdAt": { "type": "timestamp", "description": "Booking creation time" },
+        "acceptedAt": { "type": "timestamp", "description": "Accepted time" },
+        "driverArrivedAt": { "type": "timestamp", "description": "Arrived time" },
+        "startedAt": { "type": "timestamp", "description": "Start time" },
+        "completedAt": { "type": "timestamp", "description": "Completion time" },
+        "cancelledAt": { "type": "timestamp", "description": "Cancellation time" },
+        "rating": { "type": "number", "description": "Rating given by customer" },
+        "comment": { "type": "string", "description": "Feedback comment" }
+      }
+    },
+    "rides": {
+      "fields": {
+        "bookingId": { "type": "string", "description": "Booking ID" },
+        "customerId": { "type": "string", "description": "Customer UID" },
+        "driverId": { "type": "string", "description": "Driver UID" },
+        "pickup": { "type": "map", "description": "Pickup location" },
+        "destination": { "type": "map", "description": "Destination location" },
+        "distanceKm": { "type": "number", "description": "Distance" },
+        "durationMinutes": { "type": "number", "description": "Duration" },
+        "fare": { "type": "number", "description": "Fare" },
+        "startedAt": { "type": "timestamp", "description": "Start timestamp" },
+        "completedAt": { "type": "timestamp", "description": "Completed timestamp" },
+        "createdAt": { "type": "timestamp", "description": "Record timestamp" }
+      }
+    },
+    "ratings": {
+      "fields": {
+        "bookingId": { "type": "string", "description": "Booking ID" },
+        "customerId": { "type": "string", "description": "Customer UID" },
+        "driverId": { "type": "string", "description": "Driver UID" },
+        "rating": { "type": "number", "description": "1 to 5 stars" },
+        "comment": { "type": "string", "description": "Feedback text" },
+        "createdAt": { "type": "timestamp", "description": "Created time" }
+      }
+    },
+    "adminSettings": {
+      "fields": {
+        "baseFare": { "type": "number", "description": "Base fare" },
+        "pricePerKm": { "type": "number", "description": "Price per kilometer" },
+        "minimumFare": { "type": "number", "description": "Minimum fare" },
+        "initialSearchRadiusKm": { "type": "number", "description": "Search radius in Km" },
+        "updatedAt": { "type": "timestamp", "description": "Updated timestamp" }
+      }
+    },
+    "shuttleStations": {
+      "fields": {
+        "name": { "type": "string", "description": "Station Name" },
+        "address": { "type": "string", "description": "Station Address" },
+        "latitude": { "type": "number", "description": "Latitude" },
+        "longitude": { "type": "number", "description": "Longitude" },
+        "radiusMeters": { "type": "number", "description": "Proximity radius in meters" },
+        "isActive": { "type": "boolean", "description": "Active status" },
+        "category": { "type": "string", "description": "Station category" },
+        "description": { "type": "string", "description": "Additional station notes" },
+        "createdAt": { "type": "timestamp", "description": "Created time" },
+        "updatedAt": { "type": "timestamp", "description": "Updated time" }
+      }
+    }
+  }
+}

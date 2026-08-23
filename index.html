@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en" class="h-full bg-[#E3F2FD] text-slate-800">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>E-Shuttle — E-Bike Ride Hailing</title>
+    <meta name="description" content="Mobile-first e-bike ride-hailing and shuttle service." />
+    <meta name="theme-color" content="#2196F3" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="E-Shuttle" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/jpeg" href="/official_logo.jpg" />
+    <link rel="apple-touch-icon" href="/official_logo.jpg" />
+    <meta property="og:image" content="/official_logo.jpg" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  </head>
+  <body class="h-full antialiased bg-[#E3F2FD] text-slate-800 selection:bg-[#2196F3] selection:text-white overflow-x-hidden font-sans">
+    <div id="root" class="h-full flex flex-col"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch((err) => {
+            console.log('SW registration failed: ', err);
+          });
+        });
+      }
+    </script>
+  </body>
+</html>
+

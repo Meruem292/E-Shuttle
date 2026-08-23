@@ -1,0 +1,6 @@
+{
+  "name": "E-Shuttle",
+  "description": "Mobile-first e-bike ride-hailing & shuttle platform with real-time tracking, driver matching, and admin dispatch.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

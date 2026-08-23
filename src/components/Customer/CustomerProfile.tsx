@@ -1,0 +1,107 @@
+import React from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+import { LogOut } from 'lucide-react';
+import { PWAInstallButton } from '../PWAInstallPrompt';
+import officialLogo from '../../images/official_logo.jpg';
+import scsLogo from '../../images/scs_logo.jpg';
+import cctLogo from '../../images/cct_logo.jpg';
+
+export const CustomerProfile: React.FC = () => {
+  const { userProfile, logout } = useAuth();
+
+  return (
+    <div className="h-full overflow-y-auto bg-[#E3F2FD] text-[#0D47A1] p-4 pb-36 max-w-md mx-auto space-y-5">
+      <div className="pt-2 flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-black text-[#0D47A1]">
+            <span>User Profile</span>
+          </h2>
+          <p className="text-xs text-slate-500 font-medium">Manage your profile and app preferences</p>
+        </div>
+        <img
+          src={officialLogo}
+          onError={(e) => {
+            (e.target as HTMLImageElement).src = '/official_logo.jpg';
+          }}
+          alt="E-Shuttle Official Logo"
+          className="w-10 h-10 rounded-2xl object-cover border-2 border-[#0D47A1] shadow-md"
+        />
+      </div>
+
+      {/* Profile Card */}
+      <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-5 space-y-4 shadow-xl">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 bg-[#0D47A1] rounded-2xl flex items-center justify-center text-white text-xl font-black shadow-md">
+            {userProfile?.fullName?.charAt(0) || 'U'}
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-[#0D47A1]">{userProfile?.fullName || 'User'}</h3>
+            <div className="inline-block bg-[#E3F2FD] text-[#0D47A1] border border-[#0D47A1] px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase mt-1">
+              <span>User</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-[#0D47A1]/30 pt-3 space-y-2 text-xs text-slate-600">
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400 uppercase font-mono text-[10px] font-bold">Email:</span>
+            <span className="font-bold text-[#0D47A1]">{userProfile?.email || 'N/A'}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400 uppercase font-mono text-[10px] font-bold">Phone:</span>
+            <span className="font-bold text-[#0D47A1]">{userProfile?.phone || '+63 917 123 4567'}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* App Installation Card */}
+      <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-4 space-y-2 shadow-xl">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-black text-[#0D47A1] uppercase tracking-wider">Mobile App Version</span>
+          <PWAInstallButton variant="compact" />
+        </div>
+        <p className="text-[11px] text-slate-500 font-medium">
+          Install the E-Shuttle application directly to your device home screen for 1-tap quick access.
+        </p>
+        <PWAInstallButton />
+      </div>
+
+      {/* Logout Button */}
+      <button
+        onClick={logout}
+        title="Sign out of your account on this device"
+        className="w-full py-3.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border-2 border-rose-300 rounded-2xl font-bold text-xs shadow-sm transition-colors flex items-center justify-center gap-2 active:scale-95 uppercase tracking-wider"
+      >
+        <LogOut className="w-4 h-4" />
+        <span>Log Out</span>
+      </button>
+
+      {/* Institutional Accreditation */}
+      <div className="pt-1 flex items-center justify-center gap-4 opacity-75">
+        <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-semibold">
+          <img
+            src={cctLogo}
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = '/cct_logo.jpg';
+            }}
+            alt="CCT"
+            className="w-5 h-5 rounded-full object-cover border border-[#0D47A1]"
+          />
+          <span>CCT</span>
+        </div>
+        <div className="w-1 h-1 bg-[#0D47A1] rounded-full" />
+        <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-semibold">
+          <img
+            src={scsLogo}
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = '/scs_logo.jpg';
+            }}
+            alt="SCS"
+            className="w-5 h-5 rounded-full object-cover border border-[#0D47A1]"
+          />
+          <span>SCS</span>
+        </div>
+      </div>
+    </div>
+  );
+};

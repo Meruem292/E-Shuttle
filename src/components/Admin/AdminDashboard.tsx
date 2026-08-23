@@ -1,0 +1,1829 @@
+import React, { useEffect, useState } from 'react';
+import {
+  collection,
+  doc,
+  updateDoc,
+  setDoc,
+  getDoc,
+  serverTimestamp,
+  onSnapshot,
+} from 'firebase/firestore';
+import { db } from '../../firebase/config';
+import { useAuth } from '../../contexts/AuthContext';
+import { AdminSettings, DriverProfile, UserProfile, Booking } from '../../types';
+import { DEFAULT_FARE_SETTINGS } from '../../constants/fare';
+import { EBikeManagement } from './EBikeManagement';
+import { AdminEBikeMap } from './AdminEBikeMap';
+import { StationManagement } from './StationManagement';
+import { ZoneManagement } from './ZoneManagement';
+import { listenToOperationalZones } from '../../services/zoneService';
+import { OperationalZone } from '../../types';
+import { pairDriverRfidCard, subscribeToAdminRegistrationRfid } from '../../services/ebikeService';
+import { useBackHandler } from '../../contexts/NativeBackContext';
+import officialLogo from '../../images/official_logo.jpg';
+import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
+import {
+  LogOut,
+  CheckCircle,
+  XCircle,
+  Ban,
+  Save,
+  Users,
+  User,
+  Route,
+  Cpu,
+  CreditCard,
+  Search,
+  MapPin,
+  Eye,
+  ChevronRight,
+  UserCheck,
+  Settings,
+  Layers,
+  LayoutDashboard,
+  Landmark,
+} from 'lucide-react';
+
+interface AdminDashboardProps {
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
+}
+
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({
+  activeTab,
+  setActiveTab,
+}) => {
+  const { role, logout, currentUser } = useAuth();
+
+  if (role !== 'admin') {
+    return (
+      <div className="h-full w-full bg-[#E3F2FD] flex flex-col items-center justify-center p-6 text-center space-y-3">
+        <div className="w-12 h-12 bg-rose-50 border-2 border-rose-500 rounded-full flex items-center justify-center text-rose-600 font-black text-xs uppercase">
+          DENIED
+        </div>
+        <h2 className="text-lg font-black text-[#0D47A1]">Access Restricted</h2>
+        <p className="text-xs text-slate-600 max-w-sm font-medium">
+          You do not have administrative privileges to view this portal.
+        </p>
+        <button
+          onClick={logout}
+          aria-label="Log Out Account"
+          className="px-4 py-2 bg-[#2196F3] hover:bg-[#1E88E5] text-xs font-black text-white rounded-xl uppercase tracking-wider"
+        >
+          Return to Sign In
+        </button>
+      </div>
+    );
+  }
+
+  // State
+  const [customers, setCustomers] = useState<UserProfile[]>([]);
+  const [drivers, setDrivers] = useState<DriverProfile[]>([]);
+  const [zones, setZones] = useState<OperationalZone[]>([]);
+  const [allBookings, setAllBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  // Settings state
+  const [fareSettings, setFareSettings] = useState<AdminSettings>(DEFAULT_FARE_SETTINGS);
+  const [settingsSaving, setSettingsSaving] = useState<boolean>(false);
+  const [settingsSuccess, setSettingsSuccess] = useState<boolean>(false);
+
+  // RFID Pairing Modal State
+  const [rfidModalDriver, setRfidModalDriver] = useState<DriverProfile | null>(null);
+  const [modalRfidInput, setModalRfidInput] = useState('');
+  const [modalPairing, setModalPairing] = useState(false);
+  const [modalSuccessMsg, setModalSuccessMsg] = useState('');
+  const [targetRfidDriverId, setTargetRfidDriverId] = useState<string | null>(null);
+  const [ebikeSubTab, setEbikeSubTab] = useState<'shuttles' | 'rfid' | 'simulator' | 'esp32_code'>('shuttles');
+  const [latestScannedRfid, setLatestScannedRfid] = useState<{ rfidUid: string; scannedAt?: string } | null>(null);
+
+  // Detail View Modals
+  const [selectedCustomer, setSelectedCustomer] = useState<UserProfile | null>(null);
+  const [selectedDriverModal, setSelectedDriverModal] = useState<DriverProfile | null>(null);
+  const [selectedBookingModal, setSelectedBookingModal] = useState<Booking | null>(null);
+
+  // Native Back Button Handlers for Admin Modals
+  useBackHandler(
+    rfidModalDriver !== null,
+    () => {
+      setRfidModalDriver(null);
+      setModalRfidInput('');
+      setModalSuccessMsg('');
+      return true;
+    },
+    25,
+    'admin-rfid-modal'
+  );
+
+  useBackHandler(
+    selectedBookingModal !== null,
+    () => {
+      setSelectedBookingModal(null);
+      return true;
+    },
+    20,
+    'admin-booking-modal'
+  );
+
+  useBackHandler(
+    selectedDriverModal !== null,
+    () => {
+      setSelectedDriverModal(null);
+      return true;
+    },
+    20,
+    'admin-driver-modal'
+  );
+
+  useBackHandler(
+    selectedCustomer !== null,
+    () => {
+      setSelectedCustomer(null);
+      return true;
+    },
+    20,
+    'admin-customer-modal'
+  );
+
+  useBackHandler(
+    ebikeSubTab !== 'shuttles',
+    () => {
+      setEbikeSubTab('shuttles');
+      return true;
+    },
+    15,
+    'admin-ebike-subtab'
+  );
+
+  // Filters & Search
+  const [userTabRole, setUserTabRole] = useState<'ALL' | 'CUSTOMERS' | 'DRIVERS' | 'PENDING'>('ALL');
+  const [accountSearch, setAccountSearch] = useState('');
+  const [accountStatusFilter, setAccountStatusFilter] = useState<string>('ALL');
+  const [rideStatusFilter, setRideStatusFilter] = useState<string>('ALL');
+  const [rideSearch, setRideSearch] = useState('');
+
+  // Subscribe to live scanned RFID tags
+  useEffect(() => {
+    const unsubRfid = subscribeToAdminRegistrationRfid((data) => {
+      if (data) {
+        setLatestScannedRfid(data);
+        setModalRfidInput(data.rfidUid); // AUTO-FILL live scanned RFID tag on pairing
+      }
+    });
+    return () => unsubRfid();
+  }, []);
+
+  // Load Admin Data (Customers, Drivers, Bookings, Settings)
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // 1. Subscribe to Customers (users collection where role != 'driver')
+    const unsubCustomers = onSnapshot(
+      collection(db, 'users'),
+      (snap) => {
+        const list: UserProfile[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          if (data.role !== 'driver') {
+            list.push({ uid: d.id, ...data } as UserProfile);
+          }
+        });
+        setCustomers(list);
+      },
+      (err) => console.error('Error fetching customers:', err)
+    );
+
+    // 2. Subscribe to Drivers
+    const unsubDrivers = onSnapshot(
+      collection(db, 'drivers'),
+      (snap) => {
+        const list: DriverProfile[] = [];
+        snap.forEach((d) => list.push({ uid: d.id, ...d.data() } as DriverProfile));
+        setDrivers(list);
+      },
+      (err) => console.error('Error fetching drivers:', err)
+    );
+
+    // 3. Subscribe to All Bookings (Active, Completed, Cancelled)
+    const unsubBookings = onSnapshot(
+      collection(db, 'bookings'),
+      (snap) => {
+        const list: Booking[] = [];
+        snap.forEach((d) => {
+          list.push({ id: d.id, ...d.data() } as Booking);
+        });
+        // Sort descending by date
+        list.sort((a, b) => {
+          const tA = a.createdAt?.seconds || 0;
+          const tB = b.createdAt?.seconds || 0;
+          return tB - tA;
+        });
+        setAllBookings(list);
+        setLoading(false);
+      },
+      (err) => console.error('Error fetching bookings:', err)
+    );
+
+    // 4. Fetch Fare Settings
+    getDoc(doc(db, 'adminSettings', 'default'))
+      .then((snap) => {
+        if (snap.exists()) {
+          setFareSettings(snap.data() as AdminSettings);
+        }
+      })
+      .catch((err) => console.error('Error fetching fare settings:', err));
+
+    // 5. Subscribe to Operational Zones
+    const unsubZones = listenToOperationalZones((zList) => {
+      setZones(zList);
+    });
+
+    return () => {
+      unsubCustomers();
+      unsubDrivers();
+      unsubBookings();
+      unsubZones();
+    };
+  }, [currentUser]);
+
+  // Handler: Update Driver Zone
+  const handleUpdateDriverZone = async (driverId: string, zoneId: string) => {
+    const matchedZone = zones.find((z) => z.id === zoneId);
+    try {
+      await updateDoc(doc(db, 'drivers', driverId), {
+        zoneId: zoneId || null,
+        zoneName: matchedZone?.name || null,
+        updatedAt: serverTimestamp(),
+      });
+      if (selectedDriverModal && selectedDriverModal.uid === driverId) {
+        setSelectedDriverModal({
+          ...selectedDriverModal,
+          zoneId: zoneId || null,
+          zoneName: matchedZone?.name || null,
+        });
+      }
+    } catch (err) {
+      console.error('Error updating driver zone:', err);
+    }
+  };
+
+  // Handler: Update Driver Status
+  const handleUpdateDriverStatus = async (
+    driverId: string,
+    newStatus: 'APPROVED' | 'REJECTED' | 'SUSPENDED'
+  ) => {
+    try {
+      await updateDoc(doc(db, 'drivers', driverId), {
+        accountStatus: newStatus,
+        updatedAt: serverTimestamp(),
+      });
+      if (selectedDriverModal && selectedDriverModal.uid === driverId) {
+        setSelectedDriverModal({ ...selectedDriverModal, accountStatus: newStatus });
+      }
+    } catch (err) {
+      console.error('Error updating driver status:', err);
+    }
+  };
+
+  // Handler: Update Customer Account Status
+  const handleUpdateCustomerStatus = async (
+    userId: string,
+    newStatus: 'APPROVED' | 'SUSPENDED'
+  ) => {
+    try {
+      await updateDoc(doc(db, 'users', userId), {
+        accountStatus: newStatus,
+        updatedAt: serverTimestamp(),
+      });
+      if (selectedCustomer && selectedCustomer.uid === userId) {
+        setSelectedCustomer({ ...selectedCustomer, accountStatus: newStatus });
+      }
+    } catch (err) {
+      console.error('Error updating customer status:', err);
+    }
+  };
+
+  // Approve & Open RFID Pairing Modal
+  const handleApproveAndOpenRfidModal = async (driver: DriverProfile) => {
+    try {
+      await updateDoc(doc(db, 'drivers', driver.uid), {
+        accountStatus: 'APPROVED',
+        updatedAt: serverTimestamp(),
+      });
+      setTargetRfidDriverId(driver.uid);
+      setEbikeSubTab('rfid');
+
+      setRfidModalDriver({ ...driver, accountStatus: 'APPROVED' });
+      setModalRfidInput(latestScannedRfid?.rfidUid || driver.rfidCardUid || '');
+      setModalSuccessMsg('');
+    } catch (err) {
+      console.error('Error approving driver:', err);
+    }
+  };
+
+  // Save RFID Card from Modal
+  const handleSaveRfidInModal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rfidModalDriver || !modalRfidInput) return;
+    setModalPairing(true);
+    setModalSuccessMsg('');
+
+    try {
+      await pairDriverRfidCard(rfidModalDriver.uid, modalRfidInput);
+      setModalSuccessMsg(`RFID Card [${modalRfidInput.toUpperCase()}] linked to ${rfidModalDriver.fullName}!`);
+      setTimeout(() => {
+        setRfidModalDriver(null);
+        setModalSuccessMsg('');
+      }, 1400);
+    } catch (err) {
+      console.error('Error pairing RFID card:', err);
+    } finally {
+      setModalPairing(false);
+    }
+  };
+
+  // Save Fare Settings
+  const handleSaveSettings = async () => {
+    setSettingsSaving(true);
+    setSettingsSuccess(false);
+
+    try {
+      await setDoc(doc(db, 'adminSettings', 'default'), {
+        ...fareSettings,
+        updatedAt: serverTimestamp(),
+      });
+      setSettingsSuccess(true);
+      setTimeout(() => setSettingsSuccess(false), 3000);
+    } catch (err) {
+      console.error('Error saving settings:', err);
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
+
+  // Date Formatter Helper
+  const formatDate = (ts: any) => {
+    if (!ts) return 'N/A';
+    if (ts.seconds) return new Date(ts.seconds * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+    if (typeof ts === 'string' || typeof ts === 'number') return new Date(ts).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+    return 'N/A';
+  };
+
+  // Filter Computations
+  const pendingDrivers = drivers.filter((d) => d.accountStatus === 'PENDING');
+  const onlineDrivers = drivers.filter((d) => d.availability === 'ONLINE' || d.availability === 'BUSY');
+  const activeBookings = allBookings.filter((b) =>
+    ['SEARCHING', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVING', 'DRIVER_ARRIVED', 'RIDE_STARTED'].includes(b.status)
+  );
+  const completedBookings = allBookings.filter((b) => b.status === 'COMPLETED');
+
+  // Strict separation: Filter out any drivers from customer accounts
+  const driverUids = new Set(drivers.map((d) => d.uid));
+  const driverEmails = new Set(drivers.map((d) => d.email?.toLowerCase()).filter(Boolean));
+
+  const customersOnly = customers.filter((c) => {
+    if (c.role === 'driver') return false;
+    if (driverUids.has(c.uid)) return false;
+    if (c.email && driverEmails.has(c.email.toLowerCase())) return false;
+    if (c.fullName?.toLowerCase().startsWith('driver ')) return false;
+    return true;
+  });
+
+  // Filtered Customers
+  const filteredCustomers = customersOnly.filter((c) => {
+    const q = accountSearch.toLowerCase();
+    const matchesSearch =
+      c.fullName?.toLowerCase().includes(q) ||
+      c.email?.toLowerCase().includes(q) ||
+      c.phone?.includes(q);
+
+    if (!matchesSearch) return false;
+
+    if (accountStatusFilter === 'ACTIVE' || accountStatusFilter === 'APPROVED') {
+      return c.accountStatus !== 'SUSPENDED';
+    }
+    if (accountStatusFilter === 'SUSPENDED') {
+      return c.accountStatus === 'SUSPENDED';
+    }
+    if (accountStatusFilter === 'ONLINE' || accountStatusFilter === 'PENDING') {
+      return false;
+    }
+    return true;
+  });
+
+  // Filtered Drivers
+  const filteredDrivers = drivers.filter((d) => {
+    const q = accountSearch.toLowerCase();
+    const matchesSearch =
+      d.fullName?.toLowerCase().includes(q) ||
+      d.email?.toLowerCase().includes(q) ||
+      d.phone?.includes(q) ||
+      d.vehicleInfo?.toLowerCase().includes(q) ||
+      d.rfidCardUid?.toLowerCase().includes(q) ||
+      d.zoneName?.toLowerCase().includes(q);
+
+    if (!matchesSearch) return false;
+
+    if (accountStatusFilter === 'PENDING') return d.accountStatus === 'PENDING';
+    if (accountStatusFilter === 'APPROVED' || accountStatusFilter === 'ACTIVE') return d.accountStatus === 'APPROVED';
+    if (accountStatusFilter === 'SUSPENDED') return d.accountStatus === 'SUSPENDED';
+    if (accountStatusFilter === 'ONLINE') return d.availability === 'ONLINE' || d.availability === 'BUSY';
+    return true;
+  });
+
+  // Filtered Rides Log
+  const filteredRides = allBookings.filter((b) => {
+    const q = rideSearch.toLowerCase();
+    const matchesSearch =
+      b.customerName?.toLowerCase().includes(q) ||
+      b.driverName?.toLowerCase().includes(q) ||
+      b.pickup?.address?.toLowerCase().includes(q) ||
+      b.destination?.address?.toLowerCase().includes(q) ||
+      b.id?.toLowerCase().includes(q);
+
+    if (!matchesSearch) return false;
+
+    if (rideStatusFilter === 'ACTIVE') {
+      return ['SEARCHING', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVING', 'DRIVER_ARRIVED', 'RIDE_STARTED'].includes(b.status);
+    }
+    if (rideStatusFilter === 'COMPLETED') return b.status === 'COMPLETED';
+    if (rideStatusFilter === 'CANCELLED') return b.status === 'CANCELLED' || b.status === 'EXPIRED';
+    return true;
+  });
+
+  // Strict tab resolution fallback to ensure contents never render blank on page refresh
+  const validAdminTabs = ['dashboard', 'zones', 'stations', 'users', 'customers', 'drivers', 'rides', 'ebikes', 'settings'];
+  const currentTab = activeTab === 'map' ? 'dashboard' : validAdminTabs.includes(activeTab) ? activeTab : 'dashboard';
+
+  return (
+    <div className="h-full overflow-y-auto bg-[#E3F2FD] text-[#0D47A1] p-3 sm:p-5 pb-36 max-w-5xl mx-auto space-y-5">
+      {/* Admin Header */}
+      <div className="flex items-center justify-between pt-1">
+        <div className="flex items-center gap-3">
+          <img
+            src={officialLogo}
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = '/official_logo.jpg';
+            }}
+            alt="E-Shuttle Official Logo"
+            className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl object-cover border-2 border-[#0D47A1] shadow-md shrink-0"
+          />
+          <div>
+            <h1 className="text-lg sm:text-2xl font-black text-[#0D47A1] flex items-center gap-2">
+              <span>Admin Control Panel</span>
+              <span className="text-[10px] font-black bg-[#0D47A1] text-white border border-[#0D47A1] px-2 py-0.5 rounded-full uppercase hidden sm:inline-block shadow-sm">
+                ADMIN
+              </span>
+            </h1>
+            <p className="text-xs text-slate-500 font-medium">Manage users, drivers, e-shuttles & pick-up dispatch</p>
+          </div>
+        </div>
+
+        <button
+          onClick={logout}
+          className="px-3 py-1.5 bg-white border-2 border-[#0D47A1] rounded-xl text-[#0D47A1] hover:bg-[#E3F2FD] transition-colors font-bold text-xs uppercase flex items-center gap-1.5 active:scale-95 shadow-sm"
+          title="Sign out of administrator session"
+        >
+          <LogOut className="w-3.5 h-3.5 text-[#0D47A1]" />
+          <span className="hidden sm:inline">Sign Out</span>
+        </button>
+      </div>
+
+      {/* Admin Top Navigation Bar */}
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 px-1 bg-white border-2 border-[#0D47A1] rounded-2xl shadow-sm">
+        <button
+          onClick={() => setActiveTab('dashboard')}
+          className={`px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0 transition-all ${
+            currentTab === 'dashboard'
+              ? 'bg-[#0D47A1] text-white shadow-md'
+              : 'text-[#0D47A1] hover:bg-[#E3F2FD]'
+          }`}
+        >
+          <LayoutDashboard className="w-3.5 h-3.5" />
+          <span>Dashboard</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('zones')}
+          className={`px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0 transition-all ${
+            currentTab === 'zones'
+              ? 'bg-[#0D47A1] text-white shadow-md'
+              : 'text-[#0D47A1] hover:bg-[#E3F2FD]'
+          }`}
+        >
+          <Layers className="w-3.5 h-3.5" />
+          <span>Area Zones ({zones.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('stations')}
+          className={`px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0 transition-all ${
+            currentTab === 'stations'
+              ? 'bg-[#0D47A1] text-white shadow-md'
+              : 'text-[#0D47A1] hover:bg-[#E3F2FD]'
+          }`}
+        >
+          <Landmark className="w-3.5 h-3.5" />
+          <span>Stations</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setUserTabRole('ALL');
+            setActiveTab('users');
+          }}
+          className={`px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0 transition-all ${
+            currentTab === 'users' || currentTab === 'customers' || currentTab === 'drivers'
+              ? 'bg-[#0D47A1] text-white shadow-md'
+              : 'text-[#0D47A1] hover:bg-[#E3F2FD]'
+          }`}
+        >
+          <Users className="w-3.5 h-3.5" />
+          <span>Users & Drivers ({customersOnly.length + drivers.length})</span>
+          {pendingDrivers.length > 0 && (
+            <span className="bg-amber-400 text-slate-900 text-[10px] font-black px-1.5 py-0.2 rounded-full">
+              {pendingDrivers.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('rides')}
+          className={`px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0 transition-all ${
+            currentTab === 'rides'
+              ? 'bg-[#0D47A1] text-white shadow-md'
+              : 'text-[#0D47A1] hover:bg-[#E3F2FD]'
+          }`}
+        >
+          <Route className="w-3.5 h-3.5" />
+          <span>Trips</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('ebikes')}
+          className={`px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0 transition-all ${
+            currentTab === 'ebikes'
+              ? 'bg-[#0D47A1] text-white shadow-md'
+              : 'text-[#0D47A1] hover:bg-[#E3F2FD]'
+          }`}
+        >
+          <Cpu className="w-3.5 h-3.5" />
+          <span>E-Shuttles & RFID</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('settings')}
+          className={`px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0 transition-all ${
+            currentTab === 'settings'
+              ? 'bg-[#0D47A1] text-white shadow-md'
+              : 'text-[#0D47A1] hover:bg-[#E3F2FD]'
+          }`}
+        >
+          <Settings className="w-3.5 h-3.5" />
+          <span>Settings</span>
+        </button>
+      </div>
+
+      {/* =========================================================================
+          VIEW 1: MERGED EXECUTIVE DASHBOARD & LIVE MAP
+         ========================================================================= */}
+      {currentTab === 'dashboard' && (
+        <div className="space-y-5 animate-in fade-in duration-200">
+          {/* KPI Stat Cards Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div
+              onClick={() => {
+                setUserTabRole('ALL');
+                setActiveTab('users');
+              }}
+              title="View all registered users and drivers"
+              className="bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD]/30 rounded-2xl p-4 space-y-1 cursor-pointer transition-all shadow-md"
+            >
+              <div className="flex items-center justify-between text-slate-500">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-[#0D47A1]">Users & Drivers</span>
+                <Users className="w-4 h-4 text-[#0D47A1]" />
+              </div>
+              <div className="text-2xl font-black text-[#0D47A1] flex items-baseline gap-2">
+                <span>{customersOnly.length + drivers.length}</span>
+                {pendingDrivers.length > 0 && (
+                  <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-300">
+                    {pendingDrivers.length} Pending
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-slate-500 font-medium">{customersOnly.length} users • {drivers.length} drivers</p>
+            </div>
+
+            <div
+              onClick={() => {
+                setUserTabRole('DRIVERS');
+                setActiveTab('users');
+              }}
+              title="View driver accounts and active statuses"
+              className="bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD]/30 rounded-2xl p-4 space-y-1 cursor-pointer transition-all shadow-md"
+            >
+              <div className="flex items-center justify-between text-[#0D47A1]">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-[#0D47A1]">Active Drivers</span>
+                <Users className="w-4 h-4 text-[#0D47A1]" />
+              </div>
+              <div className="text-2xl font-black text-[#0D47A1] flex items-baseline gap-2">
+                <span>{drivers.length}</span>
+              </div>
+              <p className="text-[10px] text-[#0D47A1] font-bold">{onlineDrivers.length} Online Now</p>
+            </div>
+
+            <div
+              onClick={() => setActiveTab('rides')}
+              title="View ongoing pick-up & drop-off trips"
+              className="bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD]/30 rounded-2xl p-4 space-y-1 cursor-pointer transition-all shadow-md"
+            >
+              <div className="flex items-center justify-between text-[#0D47A1]">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-[#0D47A1]">Ongoing Trips</span>
+                <Route className="w-4 h-4 text-[#0D47A1]" />
+              </div>
+              <div className="text-2xl font-black text-[#0D47A1]">{activeBookings.length}</div>
+              <p className="text-[10px] text-slate-500 font-medium">Trips in transit now</p>
+            </div>
+
+            <div
+              onClick={() => setActiveTab('rides')}
+              title="View completed trips archive"
+              className="bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD]/30 rounded-2xl p-4 space-y-1 cursor-pointer transition-all shadow-md"
+            >
+              <div className="flex items-center justify-between text-[#0D47A1]">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-[#0D47A1]">Completed Trips</span>
+                <CheckCircle className="w-4 h-4 text-[#0D47A1]" />
+              </div>
+              <div className="text-2xl font-black text-[#0D47A1]">{completedBookings.length}</div>
+              <p className="text-[10px] text-slate-500 font-medium">Total finished trips</p>
+            </div>
+          </div>
+
+          {/* Quick Action Navigation Shortcuts */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+            <button
+              onClick={() => setActiveTab('zones')}
+              title="Create and configure geographic service zones"
+              className="p-3 bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD]/40 rounded-2xl flex items-center gap-3 text-left transition-all shadow-sm group"
+            >
+              <div className="w-9 h-9 bg-[#0D47A1] rounded-xl flex items-center justify-center text-white group-hover:bg-[#1565C0] transition-colors shrink-0 shadow-sm">
+                <Layers className="w-4 h-4" />
+              </div>
+              <div className="overflow-hidden">
+                <div className="text-xs font-bold text-[#0D47A1] truncate">Area Zones</div>
+                <div className="text-[10px] text-slate-500 truncate">{zones.length} service zones</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('stations')}
+              title="Pin and manage designated shuttle stations & geofences"
+              className="p-3 bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD]/40 rounded-2xl flex items-center gap-3 text-left transition-all shadow-sm group"
+            >
+              <div className="w-9 h-9 bg-[#0D47A1] rounded-xl flex items-center justify-center text-white group-hover:bg-[#1565C0] transition-colors shrink-0 shadow-sm">
+                <MapPin className="w-4 h-4" />
+              </div>
+              <div className="overflow-hidden">
+                <div className="text-xs font-bold text-[#0D47A1] truncate">Station Pins</div>
+                <div className="text-[10px] text-slate-500 truncate">Manage station pins & geofences</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => {
+                setUserTabRole('ALL');
+                setActiveTab('users');
+              }}
+              title="Manage registered users and driver accounts"
+              className="p-3 bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD]/40 rounded-2xl flex items-center gap-3 text-left transition-all shadow-sm group"
+            >
+              <div className="w-9 h-9 bg-[#0D47A1] rounded-xl flex items-center justify-center text-white group-hover:bg-[#1565C0] transition-colors shrink-0 shadow-sm">
+                <Users className="w-4 h-4" />
+              </div>
+              <div className="overflow-hidden">
+                <div className="text-xs font-bold text-[#0D47A1] truncate">Users & Drivers</div>
+                <div className="text-[10px] text-slate-500 truncate">{customersOnly.length + drivers.length} accounts</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => {
+                setUserTabRole('PENDING');
+                setActiveTab('users');
+              }}
+              title="Review and approve pending driver applications"
+              className="p-3 bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD]/40 rounded-2xl flex items-center gap-3 text-left transition-all shadow-sm group"
+            >
+              <div className="w-9 h-9 bg-[#0D47A1] rounded-xl flex items-center justify-center text-white group-hover:bg-[#1565C0] transition-colors shrink-0 shadow-sm">
+                <UserCheck className="w-4 h-4" />
+              </div>
+              <div className="overflow-hidden">
+                <div className="text-xs font-bold text-[#0D47A1] truncate">Driver Approvals</div>
+                <div className="text-[10px] text-slate-500 truncate">{pendingDrivers.length} waiting for approval</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('rides')}
+              title="View full history of all pick-up and drop-off records"
+              className="p-3 bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD]/40 rounded-2xl flex items-center gap-3 text-left transition-all shadow-sm group"
+            >
+              <div className="w-9 h-9 bg-[#0D47A1] rounded-xl flex items-center justify-center text-white group-hover:bg-[#1565C0] transition-colors shrink-0 shadow-sm">
+                <Route className="w-4 h-4" />
+              </div>
+              <div className="overflow-hidden">
+                <div className="text-xs font-bold text-[#0D47A1] truncate">Pick-up & Drop-off</div>
+                <div className="text-[10px] text-slate-500 truncate">{allBookings.length} total trips recorded</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('ebikes')}
+              title="Manage E-Shuttles and RFID access cards"
+              className="p-3 bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD]/40 rounded-2xl flex items-center gap-3 text-left transition-all shadow-sm group"
+            >
+              <div className="w-9 h-9 bg-[#0D47A1] rounded-xl flex items-center justify-center text-white group-hover:bg-[#1565C0] transition-colors shrink-0 shadow-sm">
+                <Cpu className="w-4 h-4" />
+              </div>
+              <div className="overflow-hidden">
+                <div className="text-xs font-bold text-[#0D47A1] truncate">E-Shuttles & RFID</div>
+                <div className="text-[10px] text-[#0D47A1] font-bold truncate">Manage shuttles & cards</div>
+              </div>
+            </button>
+          </div>
+
+          {/* INTEGRATED LIVE MAP */}
+          <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-4 space-y-3 shadow-md">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-black text-[#0D47A1] flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shrink-0" />
+                  <MapPin className="w-4 h-4 text-[#0D47A1]" />
+                  <span>Live E-Shuttle & Driver Map</span>
+                </h2>
+                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                  Real-time GPS tracking of active drivers ({onlineDrivers.length} online) and e-shuttles
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setEbikeSubTab('simulator');
+                    setActiveTab('ebikes');
+                  }}
+                  title="Simulate live GPS movement and hardware telemetry"
+                  className="px-3.5 py-1.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-black uppercase transition-all flex items-center gap-1.5 shadow-md active:scale-95"
+                >
+                  <Cpu className="w-3.5 h-3.5 text-[#90CAF9]" />
+                  <span>GPS Simulator</span>
+                </button>
+              </div>
+            </div>
+
+            <AdminEBikeMap
+              drivers={drivers}
+              height="480px"
+              onNavigateToStations={() => setActiveTab('stations')}
+            />
+          </div>
+
+          {/* Live Ongoing Rides Feed */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-black text-[#0D47A1] flex items-center gap-2">
+                <span className="w-2 h-2 bg-[#0D47A1] rounded-full animate-ping" />
+                <span>Ongoing Trips ({activeBookings.length})</span>
+              </h2>
+              <button
+                onClick={() => setActiveTab('rides')}
+                title="View full list of pick-up and drop-off trips"
+                className="text-xs text-[#0D47A1] hover:text-[#1565C0] font-bold flex items-center gap-1"
+              >
+                <span>View All</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {activeBookings.length === 0 ? (
+              <div className="p-8 text-center text-slate-500 text-xs bg-white rounded-3xl border-2 border-[#0D47A1] space-y-1 shadow-md">
+                <Route className="w-6 h-6 text-[#0D47A1] mx-auto mb-2" />
+                <p className="font-bold text-[#0D47A1]">No Ongoing Trips Right Now</p>
+                <p className="text-[11px] text-slate-500 font-medium">New user pick-up requests and assigned trips will appear here.</p>
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {activeBookings.slice(0, 4).map((booking) => (
+                  <div
+                    key={booking.id}
+                    onClick={() => setSelectedBookingModal(booking)}
+                    className="bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD]/30 rounded-2xl p-4 space-y-3 shadow-md cursor-pointer transition-all text-[#0D47A1]"
+                  >
+                    <div className="flex items-center justify-between border-b border-[#0D47A1]/20 pb-2">
+                      <div>
+                        <span className="text-[10px] font-extrabold text-[#0D47A1] uppercase tracking-wider bg-[#E3F2FD] px-2 py-0.5 rounded-full border border-[#0D47A1]">
+                          {booking.status}
+                        </span>
+                        <h3 className="font-black text-sm text-[#0D47A1] mt-1">User: {booking.customerName}</h3>
+                        <p className="text-xs text-slate-500 font-medium">Driver: {booking.driverName || 'Searching for driver...'}</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="inline-block text-[10px] font-extrabold text-[#0D47A1] bg-[#E3F2FD] border border-[#0D47A1] px-2 py-0.5 rounded-full uppercase">
+                          Free Shuttle
+                        </span>
+                        <div className="text-[10px] text-slate-500 font-medium mt-1">{booking.distanceKm} km</div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1 text-xs text-slate-700">
+                      <div className="flex items-start gap-2">
+                        <span className="text-[9px] font-mono font-bold text-white bg-[#0D47A1] px-1.5 py-0.5 rounded uppercase shrink-0">PICKUP</span>
+                        <span className="truncate font-medium">{booking.pickup?.address}</span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-[9px] font-mono font-bold text-white bg-[#1565C0] px-1.5 py-0.5 rounded uppercase shrink-0">DEST</span>
+                        <span className="truncate font-medium">{booking.destination?.address}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Recent Activity Feed */}
+          <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-4 space-y-3 shadow-md">
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">Recent Completed Trips</h3>
+            {completedBookings.length === 0 ? (
+              <p className="text-xs text-slate-500 italic">No completed trips recorded yet.</p>
+            ) : (
+              <div className="divide-y divide-[#0D47A1]/20">
+                {completedBookings.slice(0, 5).map((ride) => (
+                  <div
+                    key={ride.id}
+                    onClick={() => setSelectedBookingModal(ride)}
+                    className="py-2.5 flex items-center justify-between text-xs cursor-pointer hover:bg-[#E3F2FD]/50 px-2 rounded-xl transition-colors"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="font-bold text-[#0D47A1] flex items-center gap-2">
+                        <span>{ride.customerName}</span>
+                        <span className="text-[10px] text-slate-500 font-normal">→ {ride.driverName || 'Driver'}</span>
+                      </div>
+                      <div className="text-[10px] text-slate-500 truncate max-w-md">
+                        {ride.pickup?.address} to {ride.destination?.address}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0 ml-2">
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 uppercase">
+                        COMPLETED
+                      </span>
+                      <div className="text-[9px] text-slate-400 mt-0.5">{formatDate(ride.createdAt)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          VIEW 2: UNIFIED USERS & DRIVERS MANAGEMENT PORTAL
+         ========================================================================= */}
+      {(currentTab === 'users' || currentTab === 'customers' || currentTab === 'drivers') && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-black text-[#0D47A1] flex items-center gap-2">
+                <Users className="w-5 h-5 text-[#0D47A1]" />
+                <span>Users & Driver Accounts ({customersOnly.length + drivers.length})</span>
+              </h2>
+              <p className="text-xs text-slate-500 font-medium">
+                Unified account directory for passengers, shuttle drivers, approvals, and RFID access
+              </p>
+            </div>
+
+            {/* Unified Search Input */}
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                placeholder="Search name, phone, email, RFID..."
+                value={accountSearch}
+                onChange={(e) => setAccountSearch(e.target.value)}
+                className="w-full bg-white border-2 border-[#0D47A1] rounded-xl pl-9 pr-3 py-1.5 text-xs text-[#0D47A1] placeholder:text-slate-400 focus:outline-none focus:border-[#1565C0]"
+              />
+            </div>
+          </div>
+
+          {/* Sub-tab Pill Switcher */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+            <button
+              onClick={() => setUserTabRole('ALL')}
+              className={`px-3 py-1.5 rounded-xl font-black uppercase text-[10px] tracking-wider shrink-0 transition-colors ${
+                userTabRole === 'ALL'
+                  ? 'bg-[#0D47A1] text-white shadow-md'
+                  : 'bg-white text-[#0D47A1] border-2 border-[#0D47A1] hover:bg-[#E3F2FD]'
+              }`}
+            >
+              All Accounts ({customersOnly.length + drivers.length})
+            </button>
+
+            <button
+              onClick={() => setUserTabRole('CUSTOMERS')}
+              className={`px-3 py-1.5 rounded-xl font-black uppercase text-[10px] tracking-wider shrink-0 transition-colors flex items-center gap-1.5 ${
+                userTabRole === 'CUSTOMERS'
+                  ? 'bg-[#0D47A1] text-white shadow-md'
+                  : 'bg-white text-[#0D47A1] border-2 border-[#0D47A1] hover:bg-[#E3F2FD]'
+              }`}
+            >
+              <User className="w-3.5 h-3.5" />
+              <span>Passengers ({customersOnly.length})</span>
+            </button>
+
+            <button
+              onClick={() => setUserTabRole('DRIVERS')}
+              className={`px-3 py-1.5 rounded-xl font-black uppercase text-[10px] tracking-wider shrink-0 transition-colors flex items-center gap-1.5 ${
+                userTabRole === 'DRIVERS'
+                  ? 'bg-[#0D47A1] text-white shadow-md'
+                  : 'bg-white text-[#0D47A1] border-2 border-[#0D47A1] hover:bg-[#E3F2FD]'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Drivers ({drivers.length})</span>
+            </button>
+
+            <button
+              onClick={() => setUserTabRole('PENDING')}
+              className={`px-3 py-1.5 rounded-xl font-black uppercase text-[10px] tracking-wider shrink-0 transition-colors flex items-center gap-1.5 ${
+                userTabRole === 'PENDING'
+                  ? 'bg-amber-600 text-white shadow-md'
+                  : pendingDrivers.length > 0
+                  ? 'bg-amber-50 text-amber-800 border-2 border-amber-400 hover:bg-amber-100'
+                  : 'bg-white text-[#0D47A1] border-2 border-[#0D47A1] hover:bg-[#E3F2FD]'
+              }`}
+            >
+              <UserCheck className="w-3.5 h-3.5" />
+              <span>Pending Approvals ({pendingDrivers.length})</span>
+            </button>
+
+            {/* Status Filter Dropdown */}
+            <div className="ml-auto flex items-center gap-1.5 shrink-0">
+              <span className="text-[10px] font-bold text-slate-500 uppercase hidden sm:inline">Status:</span>
+              <select
+                value={accountStatusFilter}
+                onChange={(e) => setAccountStatusFilter(e.target.value)}
+                className="px-2.5 py-1 bg-white border-2 border-[#0D47A1] rounded-xl text-xs font-bold text-[#0D47A1] focus:outline-none"
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="ACTIVE">Active / Approved</option>
+                <option value="ONLINE">Online Drivers</option>
+                <option value="PENDING">Pending Approval</option>
+                <option value="SUSPENDED">Suspended</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Accounts Directory Grid */}
+          <div className="space-y-3">
+            {/* Show Drivers if Role is ALL, DRIVERS, or PENDING */}
+            {(userTabRole === 'ALL' || userTabRole === 'DRIVERS' || userTabRole === 'PENDING') && (
+              <div className="space-y-3">
+                {userTabRole === 'ALL' && (
+                  <div className="flex items-center justify-between pt-2 pb-1 border-b border-[#0D47A1]/20">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-[#0D47A1] flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5" />
+                      <span>Shuttle Drivers ({filteredDrivers.length})</span>
+                    </h3>
+                  </div>
+                )}
+
+                {filteredDrivers.length === 0 && (userTabRole === 'DRIVERS' || userTabRole === 'PENDING') ? (
+                  <div className="p-8 text-center text-slate-500 text-xs bg-white rounded-3xl border-2 border-[#0D47A1] shadow-md">
+                    No matching driver accounts found.
+                  </div>
+                ) : (
+                  filteredDrivers.map((dr) => (
+                    <div
+                      key={dr.uid}
+                      className="bg-white border-2 border-[#0D47A1] rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md hover:bg-[#E3F2FD]/30 transition-colors text-[#0D47A1]"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-[#0D47A1] text-white rounded-xl flex items-center justify-center font-black text-xs uppercase shrink-0 shadow-sm">
+                          {dr.fullName?.charAt(0) || 'D'}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-[#0D47A1] text-white shadow-sm">
+                              DRIVER
+                            </span>
+                            <h3 className="font-black text-sm text-[#0D47A1]">{dr.fullName}</h3>
+                            <span
+                              className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                                dr.accountStatus === 'APPROVED'
+                                  ? 'bg-[#E3F2FD] text-[#0D47A1] border-[#0D47A1]'
+                                  : dr.accountStatus === 'PENDING'
+                                  ? 'bg-amber-50 text-amber-800 border-amber-300 animate-pulse'
+                                  : 'bg-rose-50 text-rose-600 border-rose-200'
+                              }`}
+                            >
+                              {dr.accountStatus}
+                            </span>
+
+                            <span
+                              className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                                dr.availability === 'ONLINE'
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : dr.availability === 'BUSY'
+                                  ? 'bg-[#E3F2FD] text-[#0D47A1] border border-[#0D47A1]'
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}
+                            >
+                              {dr.availability || 'OFFLINE'}
+                            </span>
+
+                            {/* Zone Badge with Quick Assignment Selector */}
+                            <div className="flex items-center gap-1 bg-[#E3F2FD] border border-[#0D47A1] px-2 py-0.5 rounded-lg text-[10px]">
+                              <span className="font-bold text-[#0D47A1]">📍 Zone:</span>
+                              <select
+                                value={dr.zoneId || ''}
+                                onChange={async (e) => {
+                                  const zId = e.target.value;
+                                  const z = zones.find((item) => item.id === zId);
+                                  try {
+                                    await updateDoc(doc(db, 'drivers', dr.uid), {
+                                      zoneId: zId || null,
+                                      zoneName: z ? z.name : null,
+                                      updatedAt: serverTimestamp(),
+                                    });
+                                  } catch (err) {
+                                    console.error('Error updating driver zone:', err);
+                                  }
+                                }}
+                                className="bg-transparent font-bold text-[#0D47A1] focus:outline-none cursor-pointer text-[10px]"
+                              >
+                                <option value="">No Zone (All)</option>
+                                {zones.map((zone) => (
+                                  <option key={zone.id} value={zone.id}>
+                                    {zone.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {dr.rfidCardUid ? (
+                              <span className="font-mono text-[10px] font-black text-[#0D47A1] bg-[#E3F2FD] border border-[#0D47A1] px-2 py-0.5 rounded-lg flex items-center gap-1">
+                                <CreditCard className="w-3 h-3 text-[#0D47A1]" />
+                                <span>RFID: {dr.rfidCardUid}</span>
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-amber-700 italic font-bold">
+                                * No RFID Linked
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-500 font-medium">
+                            {dr.phone} • {dr.email}
+                          </p>
+                          <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                            Vehicle: {sanitizeVehicleInfo(dr.vehicleInfo)} • Rating: ⭐ {dr.rating || '5.0'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                        <button
+                          onClick={() => setSelectedDriverModal(dr)}
+                          title="View driver profile and operational stats"
+                          className="px-3 py-1.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform shadow-sm"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-[#90CAF9]" />
+                          <span>Profile</span>
+                        </button>
+
+                        {dr.accountStatus !== 'APPROVED' && (
+                          <button
+                            onClick={() => handleApproveAndOpenRfidModal(dr)}
+                            title="Approve driver application and assign RFID access card"
+                            className="px-3.5 py-1.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-black shadow-md uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-transform"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            <CreditCard className="w-3.5 h-3.5 text-[#90CAF9]" />
+                            <span>Approve & Link Card</span>
+                          </button>
+                        )}
+
+                        {dr.accountStatus === 'APPROVED' && (
+                          <button
+                            onClick={() => {
+                              setRfidModalDriver(dr);
+                              setModalRfidInput(latestScannedRfid?.rfidUid || dr.rfidCardUid || '');
+                              setModalSuccessMsg('');
+                            }}
+                            title="Update RFID access card UID assigned to driver"
+                            className="px-3 py-1.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-transform shadow-sm"
+                          >
+                            <CreditCard className="w-3.5 h-3.5 text-[#90CAF9]" />
+                            <span>{dr.rfidCardUid ? 'Change Card' : 'Link Card'}</span>
+                          </button>
+                        )}
+
+                        {dr.accountStatus === 'PENDING' && (
+                          <button
+                            onClick={() => handleUpdateDriverStatus(dr.uid, 'REJECTED')}
+                            title="Decline driver registration request"
+                            className="px-3 py-1.5 bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>Reject</span>
+                          </button>
+                        )}
+
+                        {dr.accountStatus === 'APPROVED' && (
+                          <button
+                            onClick={() => handleUpdateDriverStatus(dr.uid, 'SUSPENDED')}
+                            title="Suspend driver operating privileges"
+                            className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform"
+                          >
+                            <Ban className="w-3.5 h-3.5" />
+                            <span>Suspend</span>
+                          </button>
+                        )}
+
+                        {dr.accountStatus === 'SUSPENDED' && (
+                          <button
+                            onClick={() => handleUpdateDriverStatus(dr.uid, 'APPROVED')}
+                            title="Reactivate driver account"
+                            className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            <span>Reactivate</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* Show Passengers if Role is ALL or CUSTOMERS */}
+            {(userTabRole === 'ALL' || userTabRole === 'CUSTOMERS') && (
+              <div className="space-y-3 pt-2">
+                {userTabRole === 'ALL' && (
+                  <div className="flex items-center justify-between pt-2 pb-1 border-b border-[#0D47A1]/20">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-[#0D47A1] flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5" />
+                      <span>Passengers / Users ({filteredCustomers.length})</span>
+                    </h3>
+                  </div>
+                )}
+
+                {filteredCustomers.length === 0 && userTabRole === 'CUSTOMERS' ? (
+                  <div className="p-8 text-center text-slate-500 text-xs bg-white rounded-3xl border-2 border-[#0D47A1] shadow-md">
+                    No matching passenger accounts found.
+                  </div>
+                ) : (
+                  filteredCustomers.map((cust) => {
+                    const customerRides = allBookings.filter((b) => b.customerId === cust.uid);
+                    const completedCount = customerRides.filter((b) => b.status === 'COMPLETED').length;
+
+                    return (
+                      <div
+                        key={cust.uid}
+                        className="bg-white border-2 border-[#0D47A1] rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md hover:bg-[#E3F2FD]/30 transition-colors text-[#0D47A1]"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-[#0D47A1] text-white rounded-xl flex items-center justify-center font-black text-xs uppercase shrink-0 shadow-sm">
+                            {cust.fullName?.charAt(0) || 'U'}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-[#E3F2FD] text-[#0D47A1] border border-[#0D47A1]">
+                                PASSENGER
+                              </span>
+                              <h3 className="font-black text-sm text-[#0D47A1]">{cust.fullName}</h3>
+                              <span
+                                className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                                  cust.accountStatus === 'SUSPENDED'
+                                    ? 'bg-rose-50 text-rose-600 border-rose-200'
+                                    : 'bg-[#E3F2FD] text-[#0D47A1] border-[#0D47A1]'
+                                }`}
+                              >
+                                {cust.accountStatus || 'ACTIVE'}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 font-medium">
+                              {cust.phone} • {cust.email}
+                            </p>
+                            <div className="text-[10px] text-slate-500 font-medium mt-0.5">
+                              Total Trips: <strong className="text-[#0D47A1]">{completedCount}</strong> • Joined: {formatDate(cust.createdAt)}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={() => setSelectedCustomer(cust)}
+                            title="View user profile and transit history"
+                            className="px-3.5 py-2 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-transform shadow-sm"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-[#90CAF9]" />
+                            <span>Profile</span>
+                          </button>
+
+                          {cust.accountStatus === 'SUSPENDED' ? (
+                            <button
+                              onClick={() => handleUpdateCustomerStatus(cust.uid, 'APPROVED')}
+                              title="Restore user account access"
+                              className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              <span>Reactivate</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleUpdateCustomerStatus(cust.uid, 'SUSPENDED')}
+                              title="Temporarily suspend user account"
+                              className="px-3 py-1.5 bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform"
+                            >
+                              <Ban className="w-3.5 h-3.5" />
+                              <span>Suspend</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          VIEW 4: RIDES LOG & HISTORIES
+         ========================================================================= */}
+      {currentTab === 'rides' && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-black text-[#0D47A1] flex items-center gap-2">
+                <Route className="w-5 h-5 text-[#0D47A1]" />
+                <span>Pick-up & Drop-off Log ({allBookings.length})</span>
+              </h2>
+              <p className="text-xs text-slate-500 font-medium">Complete record of ongoing, completed, and cancelled transit trips</p>
+            </div>
+
+            {/* Search Bar */}
+            <div className="relative w-full sm:w-64">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                placeholder="Search user, driver, route..."
+                value={rideSearch}
+                onChange={(e) => setRideSearch(e.target.value)}
+                className="w-full bg-white border-2 border-[#0D47A1] rounded-xl pl-9 pr-3 py-1.5 text-xs text-[#0D47A1] placeholder:text-slate-400 focus:outline-none focus:border-[#1565C0]"
+              />
+            </div>
+          </div>
+
+          {/* Ride Status Filter Tabs */}
+          <div className="flex items-center gap-2 text-xs">
+            {['ALL', 'ACTIVE', 'COMPLETED', 'CANCELLED'].map((st) => (
+              <button
+                key={st}
+                onClick={() => setRideStatusFilter(st)}
+                className={`px-3.5 py-1.5 rounded-xl font-black text-[10px] uppercase tracking-wider transition-colors ${
+                  rideStatusFilter === st
+                    ? 'bg-[#0D47A1] text-white shadow-md'
+                    : 'bg-white text-[#0D47A1] border-2 border-[#0D47A1] hover:bg-[#E3F2FD]'
+                }`}
+              >
+                {st}
+              </button>
+            ))}
+          </div>
+
+          {/* Rides List */}
+          {filteredRides.length === 0 ? (
+            <div className="p-8 text-center text-slate-500 text-xs bg-white rounded-3xl border-2 border-[#0D47A1] shadow-md">
+              No pick-up & drop-off trips found matching filters.
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {filteredRides.map((ride) => (
+                <div
+                  key={ride.id}
+                  onClick={() => setSelectedBookingModal(ride)}
+                  className="bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD]/30 rounded-2xl p-4 space-y-3 shadow-md cursor-pointer transition-all text-[#0D47A1]"
+                >
+                  <div className="flex items-center justify-between border-b border-[#0D47A1]/20 pb-2">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full border ${
+                          ride.status === 'COMPLETED'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : ride.status === 'CANCELLED' || ride.status === 'EXPIRED'
+                            ? 'bg-rose-50 text-rose-600 border-rose-200'
+                            : 'bg-[#E3F2FD] text-[#0D47A1] border-[#0D47A1] animate-pulse'
+                        }`}
+                      >
+                        {ride.status}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-mono">ID: {ride.id?.slice(0, 8)}</span>
+                    </div>
+
+                    <div className="text-[10px] text-slate-500 font-medium">{formatDate(ride.createdAt)}</div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <div className="text-[10px] text-slate-500 font-bold uppercase">User</div>
+                      <div className="font-black text-[#0D47A1]">{ride.customerName}</div>
+                      <div className="text-[10px] text-slate-500 font-medium">{ride.customerPhone || 'N/A'}</div>
+                    </div>
+
+                    <div>
+                      <div className="text-[10px] text-slate-500 font-bold uppercase">Driver</div>
+                      <div className="font-black text-[#0D47A1]">{ride.driverName || 'Searching...'}</div>
+                      <div className="text-[10px] text-slate-500 font-medium">{ride.driverVehicleInfo || 'Shuttle'}</div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1 text-xs text-slate-700 bg-[#F8FAFC] p-2.5 rounded-xl border border-[#0D47A1]/30">
+                    <div className="flex items-start gap-2">
+                      <span className="text-[9px] font-mono font-bold text-white bg-[#0D47A1] px-1.5 py-0.5 rounded uppercase shrink-0">FROM</span>
+                      <span className="truncate font-medium">{ride.pickup?.address}</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-[9px] font-mono font-bold text-white bg-[#1565C0] px-1.5 py-0.5 rounded uppercase shrink-0">TO</span>
+                      <span className="truncate font-medium">{ride.destination?.address}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* =========================================================================
+          VIEW 4.4: OPERATIONAL ZONES GEOFENCE MANAGEMENT
+         ========================================================================= */}
+      {currentTab === 'zones' && (
+        <ZoneManagement />
+      )}
+
+      {/* =========================================================================
+          VIEW 4.5: DESIGNATED SHUTTLE STATIONS & GEOFENCING PIN MANAGEMENT
+         ========================================================================= */}
+      {currentTab === 'stations' && (
+        <StationManagement />
+      )}
+
+      {/* =========================================================================
+          VIEW 5: E-BIKES HARDWARE & RFID MANAGEMENT
+         ========================================================================= */}
+      {currentTab === 'ebikes' && (
+        <EBikeManagement initialSubTab={ebikeSubTab} initialDriverId={targetRfidDriverId} />
+      )}
+
+      {/* =========================================================================
+          VIEW 6: SHUTTLE SYSTEM SETTINGS CONFIGURATION
+         ========================================================================= */}
+      {currentTab === 'settings' && (
+        <div className="space-y-4 max-w-lg">
+          <h2 className="text-base font-black text-[#0D47A1] flex items-center gap-2">
+            <Settings className="w-5 h-5 text-[#0D47A1]" />
+            <span>Shuttle Service Settings</span>
+          </h2>
+
+          <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-5 space-y-4 shadow-xl">
+            <div className="p-3 bg-[#E3F2FD] border border-[#0D47A1] rounded-2xl text-[#0D47A1] text-xs">
+              <b className="text-[#0D47A1] block font-black">Free Shuttle Service (No Payment Needed)</b>
+              Users ride free of charge. No payment gateway or fare collection required.
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-[#0D47A1]">Driver Search Radius (km)</label>
+              <input
+                type="number"
+                value={fareSettings.initialSearchRadiusKm}
+                onChange={(e) =>
+                  setFareSettings({ ...fareSettings, initialSearchRadiusKm: Number(e.target.value) })
+                }
+                className="w-full bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-xl p-2.5 text-sm text-[#0D47A1] font-bold focus:bg-white focus:outline-none focus:border-[#1565C0]"
+              />
+              <p className="text-[10px] text-slate-500 font-medium">Maximum distance to send pick-up requests to nearby drivers.</p>
+            </div>
+
+            {settingsSuccess && (
+              <div className="p-2.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold text-center">
+                Shuttle settings saved successfully!
+              </div>
+            )}
+
+            <button
+              onClick={handleSaveSettings}
+              disabled={settingsSaving}
+              title="Save system parameters"
+              className="w-full py-3 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-2xl font-black text-xs shadow-lg active:scale-95 transition-transform uppercase tracking-wider flex items-center justify-center gap-2"
+            >
+              <Save className="w-4 h-4 text-[#90CAF9]" />
+              <span>{settingsSaving ? 'Saving...' : 'Save Settings'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          MODAL 1: CUSTOMER PROFILE & RIDE HISTORY
+         ========================================================================= */}
+      {selectedCustomer && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-5 max-w-lg w-full shadow-2xl space-y-4 max-h-[85vh] flex flex-col text-[#0D47A1]">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-[#0D47A1]/20 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-[#0D47A1] text-white rounded-xl flex items-center justify-center font-bold text-sm shadow-sm">
+                  {selectedCustomer.fullName?.charAt(0) || 'U'}
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-[#0D47A1]">{selectedCustomer.fullName}</h3>
+                  <p className="text-[10px] text-slate-500 font-medium">{selectedCustomer.email} • {selectedCustomer.phone}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedCustomer(null)}
+                className="text-slate-400 hover:text-[#0D47A1] p-1 rounded-lg bg-[#E3F2FD] text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Ride History */}
+            <div className="flex-1 overflow-y-auto space-y-3">
+              <div className="text-xs font-bold uppercase text-slate-500">
+                Pick-up & Drop-off History ({allBookings.filter((b) => b.customerId === selectedCustomer.uid).length} Trips)
+              </div>
+
+              {allBookings.filter((b) => b.customerId === selectedCustomer.uid).length === 0 ? (
+                <p className="text-xs text-slate-500 italic">No trips recorded for this user yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {allBookings
+                    .filter((b) => b.customerId === selectedCustomer.uid)
+                    .map((ride) => (
+                      <div key={ride.id} className="bg-[#F8FAFC] p-3 rounded-xl border border-[#0D47A1]/30 text-xs space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span
+                            className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                              ride.status === 'COMPLETED'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-[#E3F2FD] text-[#0D47A1] font-bold border border-[#0D47A1]'
+                            }`}
+                          >
+                            {ride.status}
+                          </span>
+                          <span className="text-[10px] text-slate-400">{formatDate(ride.createdAt)}</span>
+                        </div>
+                        <div className="text-[#0D47A1] font-medium truncate">
+                          {ride.pickup?.address} → {ride.destination?.address}
+                        </div>
+                        <div className="text-[10px] text-slate-500">
+                          Assigned Driver: <strong className="text-[#0D47A1]">{ride.driverName || 'N/A'}</strong>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer Actions */}
+            <div className="pt-2 border-t border-[#0D47A1]/20 flex justify-between items-center">
+              <span className="text-[10px] text-slate-400">UID: {selectedCustomer.uid}</span>
+              {selectedCustomer.accountStatus === 'SUSPENDED' ? (
+                <button
+                  onClick={() => handleUpdateCustomerStatus(selectedCustomer.uid, 'APPROVED')}
+                  title="Reactivate user account"
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl uppercase shadow-sm"
+                >
+                  Reactivate Account
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleUpdateCustomerStatus(selectedCustomer.uid, 'SUSPENDED')}
+                  title="Suspend user account"
+                  className="px-3 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 font-bold text-xs rounded-xl uppercase"
+                >
+                  Suspend Account
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          MODAL 2: DRIVER PROFILE & EARNINGS / RIDE HISTORY
+         ========================================================================= */}
+      {selectedDriverModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-5 max-w-lg w-full shadow-2xl space-y-4 max-h-[85vh] flex flex-col text-[#0D47A1]">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-[#0D47A1]/20 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-[#0D47A1] text-white rounded-xl flex items-center justify-center font-bold text-sm shadow-sm">
+                  {selectedDriverModal.fullName?.charAt(0) || 'D'}
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-[#0D47A1]">{selectedDriverModal.fullName}</h3>
+                  <p className="text-[10px] text-slate-500 font-medium">{selectedDriverModal.email} • {selectedDriverModal.phone}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedDriverModal(null)}
+                className="text-slate-400 hover:text-[#0D47A1] p-1 rounded-lg bg-[#E3F2FD] text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Driver Specs & Zone Assignment */}
+            <div className="grid grid-cols-2 gap-2 text-xs bg-[#F8FAFC] p-3 rounded-2xl border border-[#0D47A1]/30">
+              <div>
+                <span className="text-[10px] text-slate-500 font-bold uppercase block">Vehicle Info</span>
+                <span className="text-[#0D47A1] font-bold">{sanitizeVehicleInfo(selectedDriverModal.vehicleInfo)}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-500 font-bold uppercase block">RFID Card ID</span>
+                <span className="font-mono text-[#0D47A1] font-bold">
+                  {selectedDriverModal.rfidCardUid || 'None Linked'}
+                </span>
+              </div>
+              <div className="col-span-2 pt-1 border-t border-slate-200">
+                <span className="text-[10px] text-slate-500 font-bold uppercase block mb-1">Assigned Operational Zone</span>
+                <select
+                  value={selectedDriverModal.zoneId || ''}
+                  onChange={(e) => handleUpdateDriverZone(selectedDriverModal.uid, e.target.value)}
+                  className="w-full p-2 bg-white border border-[#0D47A1] rounded-xl text-xs font-bold text-[#0D47A1] focus:outline-none"
+                >
+                  <option value="">-- No Zone Assigned --</option>
+                  {zones.map((z) => (
+                    <option key={z.id} value={z.id}>
+                      {z.name} ({z.code})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  Driver will only receive booking requests generated within this zone.
+                </p>
+              </div>
+            </div>
+
+            {/* Ride History */}
+            <div className="flex-1 overflow-y-auto space-y-3">
+              <div className="text-xs font-bold uppercase text-slate-500">
+                Completed Trips ({allBookings.filter((b) => b.driverId === selectedDriverModal.uid).length})
+              </div>
+
+              {allBookings.filter((b) => b.driverId === selectedDriverModal.uid).length === 0 ? (
+                <p className="text-xs text-slate-500 italic">No completed trips recorded for this driver yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {allBookings
+                    .filter((b) => b.driverId === selectedDriverModal.uid)
+                    .map((ride) => (
+                      <div key={ride.id} className="bg-[#F8FAFC] p-3 rounded-xl border border-[#0D47A1]/30 text-xs space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-[#0D47A1]">User: {ride.customerName}</span>
+                          <span className="text-[10px] text-slate-400">{formatDate(ride.createdAt)}</span>
+                        </div>
+                        <div className="text-slate-600 text-[11px]">
+                          {ride.pickup?.address} → {ride.destination?.address}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="pt-2 border-t border-[#0D47A1]/20 flex justify-between items-center">
+              <button
+                onClick={() => {
+                  setRfidModalDriver(selectedDriverModal);
+                  setModalRfidInput(latestScannedRfid?.rfidUid || selectedDriverModal.rfidCardUid || '');
+                  setSelectedDriverModal(null);
+                }}
+                title="Pair an RFID card to this driver account"
+                className="px-3 py-1.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-bold uppercase flex items-center gap-1 shadow-sm"
+              >
+                <CreditCard className="w-3.5 h-3.5 text-[#90CAF9]" />
+                <span>Link RFID Card</span>
+              </button>
+
+              {selectedDriverModal.accountStatus === 'APPROVED' && (
+                <button
+                  onClick={() => handleUpdateDriverStatus(selectedDriverModal.uid, 'SUSPENDED')}
+                  title="Suspend driver privileges"
+                  className="px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 font-bold text-xs rounded-xl uppercase"
+                >
+                  Suspend
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          MODAL 3: FULL RIDE ITINERARY DETAIL
+         ========================================================================= */}
+      {selectedBookingModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-5 max-w-md w-full shadow-2xl space-y-4 text-[#0D47A1]">
+            <div className="flex items-center justify-between border-b border-[#0D47A1]/20 pb-3">
+              <div>
+                <h3 className="text-sm font-black text-[#0D47A1]">Trip Route & Details</h3>
+                <p className="text-[10px] text-slate-400 font-mono">ID: {selectedBookingModal.id}</p>
+              </div>
+              <button
+                onClick={() => setSelectedBookingModal(null)}
+                className="text-slate-400 hover:text-[#0D47A1] p-1 rounded-lg bg-[#E3F2FD] text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="flex justify-between items-center bg-[#F8FAFC] p-2.5 rounded-xl border border-[#0D47A1]/30">
+                <span className="text-slate-500 font-bold uppercase text-[10px]">Status</span>
+                <span className="font-black text-[#0D47A1] uppercase">{selectedBookingModal.status}</span>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[10px] text-slate-500 font-bold uppercase">User Info</span>
+                <div className="font-black text-[#0D47A1]">{selectedBookingModal.customerName}</div>
+                <div className="text-slate-500 text-[11px]">{selectedBookingModal.customerPhone || 'N/A'}</div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[10px] text-slate-500 font-bold uppercase">Assigned Driver</span>
+                <div className="font-black text-[#0D47A1]">{selectedBookingModal.driverName || 'Unassigned'}</div>
+                <div className="text-slate-500 text-[11px]">{selectedBookingModal.driverVehicleInfo || 'N/A'}</div>
+              </div>
+
+              <div className="bg-[#F8FAFC] p-3 rounded-2xl border border-[#0D47A1]/30 space-y-1.5">
+                <div className="text-[10px] text-slate-500 font-bold uppercase">Route</div>
+                <div className="text-[#0D47A1] font-bold truncate">Pickup: {selectedBookingModal.pickup?.address}</div>
+                <div className="text-[#0D47A1] font-bold truncate">Dropoff: {selectedBookingModal.destination?.address}</div>
+              </div>
+
+              <div className="flex justify-between text-[11px] text-slate-500 pt-1">
+                <span>Requested: {formatDate(selectedBookingModal.createdAt)}</span>
+                <span>Distance: {selectedBookingModal.distanceKm} km</span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setSelectedBookingModal(null)}
+              title="Close details dialog"
+              className="w-full py-2.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white font-black text-xs rounded-2xl uppercase tracking-wider shadow-sm"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          MODAL 4: SEAMLESS DRIVER RFID PAIRING MODAL
+         ========================================================================= */}
+      {rfidModalDriver && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200 text-[#0D47A1]">
+            <div className="flex items-center justify-between border-b border-[#0D47A1]/20 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 bg-[#0D47A1] text-white rounded-xl flex items-center justify-center shrink-0 shadow-sm">
+                  <CreditCard className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-[#0D47A1]">Link RFID Card to Driver</h3>
+                  <p className="text-[10px] text-emerald-600 font-bold">✓ Account Approved & Active</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setRfidModalDriver(null)}
+                className="text-slate-400 hover:text-[#0D47A1] text-xs font-bold p-1 rounded-lg bg-[#E3F2FD] transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="bg-[#F8FAFC] border border-[#0D47A1]/30 rounded-2xl p-3 text-xs space-y-1">
+              <div className="font-bold text-[#0D47A1] flex items-center justify-between">
+                <span>Driver: {rfidModalDriver.fullName}</span>
+                <span className="text-[10px] text-slate-500 font-mono">{rfidModalDriver.phone}</span>
+              </div>
+              <div className="text-slate-500 text-[11px] truncate">{rfidModalDriver.email}</div>
+            </div>
+
+            {/* Live Hardware Scan Alert Banner */}
+            {latestScannedRfid && (
+              <div className="p-2.5 bg-[#E3F2FD] border border-[#0D47A1] rounded-2xl flex items-center justify-between text-xs text-[#0D47A1] shadow-sm animate-in fade-in">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 bg-[#0D47A1] rounded-full animate-ping shrink-0" />
+                  <span>
+                    <strong>⚡ Card Scan:</strong> ID <code className="font-mono bg-white px-1.5 py-0.5 rounded text-[#0D47A1] font-bold border border-[#0D47A1]">{latestScannedRfid.rfidUid}</code>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setModalRfidInput(latestScannedRfid.rfidUid)}
+                  className="text-[10px] bg-[#0D47A1] hover:bg-[#1565C0] text-white font-bold px-2 py-0.5 rounded-lg uppercase transition-colors shadow-sm"
+                >
+                  Auto-fill
+                </button>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveRfidInModal} className="space-y-3">
+              <div>
+                <label className="text-[10px] uppercase font-bold text-slate-500">
+                  Enter or Scan RFID Card Number
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g., 47-10-CC-14 or A3-4F-89-12"
+                  value={modalRfidInput}
+                  onChange={(e) => setModalRfidInput(e.target.value)}
+                  className="w-full mt-1 bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-xl p-3 text-sm text-[#0D47A1] font-mono font-bold uppercase focus:outline-none focus:border-[#1565C0] focus:bg-white placeholder:text-slate-400"
+                />
+              </div>
+
+              {/* Quick Fill Demo Tags */}
+              <div className="space-y-1.5">
+                <span className="text-[10px] text-slate-500 font-semibold uppercase">Example Card Numbers:</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setModalRfidInput('47-10-CC-14')}
+                    className="px-2.5 py-1 bg-[#E3F2FD] border border-[#0D47A1] text-[#0D47A1] font-mono text-[10px] font-bold rounded-lg hover:bg-[#90CAF9]/40 transition-colors"
+                  >
+                    47-10-CC-14
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalRfidInput('8B-22-FA-01')}
+                    className="px-2.5 py-1 bg-[#E3F2FD] border border-[#0D47A1] text-[#0D47A1] font-mono text-[10px] font-bold rounded-lg hover:bg-[#90CAF9]/40 transition-colors"
+                  >
+                    8B-22-FA-01
+                  </button>
+                </div>
+              </div>
+
+              {modalSuccessMsg && (
+                <div className="p-2.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold text-center">
+                  {modalSuccessMsg}
+                </div>
+              )}
+
+              <div className="pt-2 space-y-2">
+                <button
+                  type="submit"
+                  disabled={modalPairing || !modalRfidInput}
+                  className="w-full py-3 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-2xl font-black text-xs shadow-lg uppercase tracking-wider disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                >
+                  <CreditCard className="w-4 h-4 text-[#90CAF9]" />
+                  <span>{modalPairing ? 'Linking Card...' : 'Link RFID Card'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (rfidModalDriver) {
+                      setTargetRfidDriverId(rfidModalDriver.uid);
+                      setEbikeSubTab('rfid');
+                      setActiveTab('ebikes');
+                      setRfidModalDriver(null);
+                    }
+                  }}
+                  title="Navigate to E-Shuttles and RFID management panel"
+                  className="w-full py-2.5 bg-[#E3F2FD] hover:bg-[#90CAF9]/40 text-[#0D47A1] border-2 border-[#0D47A1] rounded-2xl font-bold text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <span>Open E-Shuttles & RFID Page</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

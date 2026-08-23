@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-lightest: #E3F2FD;
+  --color-brand-light: #90CAF9;
+  --color-brand-primary: #2196F3;
+  --color-brand-dark: #0D47A1;
+}
+
+:root {
+  --brand-lightest: #E3F2FD;
+  --brand-light: #90CAF9;
+  --brand-primary: #2196F3;
+  --brand-dark: #0D47A1;
+}
+
+/* Light background body & smooth scrolling */
+html, body {
+  background-color: #E3F2FD;
+  color: #0D47A1;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+/* Leaflet map container light styling & strict overflow containment */
+.leaflet-container {
+  font-family: inherit;
+  width: 100% !important;
+  height: 100% !important;
+  background-color: #E3F2FD;
+  z-index: 0 !important;
+  position: relative !important;
+  overflow: hidden !important;
+  contain: paint layout !important;
+  border-radius: inherit !important;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+
+.leaflet-pane,
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow,
+.leaflet-tile-container,
+.leaflet-pane > svg,
+.leaflet-pane > canvas,
+.leaflet-zoom-box,
+.leaflet-image-layer,
+.leaflet-layer {
+  max-width: none !important;
+}
+
+/* Ensure map wrapper cards strictly contain hardware-accelerated tile layers */
+.map-card-wrapper {
+  position: relative !important;
+  overflow: hidden !important;
+  isolation: isolate !important;
+  contain: paint !important;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
+  border-radius: 1rem;
+}
+
+.custom-map-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* Leaflet popup styling for light theme */
+.leaflet-popup-content-wrapper {
+  background: #FFFFFF !important;
+  color: #0D47A1 !important;
+  border-radius: 1rem !important;
+  box-shadow: 0 10px 25px -5px rgba(13, 71, 161, 0.15) !important;
+  border: 1.5px solid #90CAF9 !important;
+}
+
+.leaflet-popup-tip {
+  background: #FFFFFF !important;
+}
+
+/* Custom scrollbar for mobile sheets */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #90CAF9;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2196F3;
+}

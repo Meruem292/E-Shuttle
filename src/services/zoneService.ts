@@ -1,0 +1,294 @@
+import {
+  collection,
+  doc,
+  addDoc,
+  getDocs,
+  getDoc,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  serverTimestamp,
+} from 'firebase/firestore';
+import { db } from '../firebase/config';
+import { OperationalZone } from '../types';
+import { calculateDistanceKm } from '../constants/fare';
+
+export const ZONES_COLLECTION = 'operational_zones';
+const LOCAL_STORAGE_ZONES_KEY = 'eshuttle_operational_zones_cache';
+
+function getLocalZones(): OperationalZone[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_ZONES_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const uniqueMap = new Map<string, OperationalZone>();
+        for (const z of parsed) {
+          if (z && z.id) uniqueMap.set(z.id, z);
+        }
+        return Array.from(uniqueMap.values());
+      }
+    }
+  } catch (e) {
+    console.warn('Could not read local zones cache', e);
+  }
+  return [];
+}
+
+function saveLocalZones(zones: OperationalZone[]) {
+  try {
+    const uniqueMap = new Map<string, OperationalZone>();
+    for (const z of zones) {
+      if (z && z.id) uniqueMap.set(z.id, z);
+    }
+    const deduplicated = Array.from(uniqueMap.values());
+    localStorage.setItem(LOCAL_STORAGE_ZONES_KEY, JSON.stringify(deduplicated));
+  } catch (e) {
+    console.warn('Could not write local zones cache', e);
+  }
+}
+
+// In-memory subscribers for real-time fallback updates
+const localZoneSubscribers = new Set<(zones: OperationalZone[]) => void>();
+
+function notifyLocalZoneSubscribers() {
+  const current = getLocalZones();
+  localZoneSubscribers.forEach((cb) => cb(current));
+}
+
+/**
+ * Real-time listener for operational zones
+ */
+export function listenToOperationalZones(
+  callback: (zones: OperationalZone[]) => void
+): () => void {
+  // Return cached immediately
+  callback(getLocalZones());
+  localZoneSubscribers.add(callback);
+
+  let isUnsubscribed = false;
+  let unsubscribeFirestore = () => {};
+
+  try {
+    const q = query(collection(db, ZONES_COLLECTION), orderBy('name', 'asc'));
+
+    unsubscribeFirestore = onSnapshot(
+      q,
+      (snapshot) => {
+        if (isUnsubscribed) return;
+        const zones: OperationalZone[] = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<OperationalZone, 'id'>),
+        }));
+        saveLocalZones(zones);
+        callback(zones);
+      },
+      (err) => {
+        console.warn('Firestore zones listener fallback to local cache:', err.message);
+        if (!isUnsubscribed) {
+          callback(getLocalZones());
+        }
+      }
+    );
+  } catch (err) {
+    console.warn('Error setting up Firestore zones listener, using local:', err);
+    callback(getLocalZones());
+  }
+
+  return () => {
+    isUnsubscribed = true;
+    localZoneSubscribers.delete(callback);
+    try {
+      unsubscribeFirestore();
+    } catch {}
+  };
+}
+
+/**
+ * Get all operational zones
+ */
+export async function getOperationalZones(): Promise<OperationalZone[]> {
+  try {
+    const snap = await getDocs(query(collection(db, ZONES_COLLECTION), orderBy('name', 'asc')));
+    const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<OperationalZone, 'id'>) }));
+    saveLocalZones(list);
+    return list;
+  } catch (err) {
+    console.warn('Error getting zones from Firestore, using local cache:', err);
+    return getLocalZones();
+  }
+}
+
+/**
+ * Create a new operational zone
+ */
+export async function addOperationalZone(
+  zone: Omit<OperationalZone, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<string> {
+  const newZoneData = {
+    name: zone.name.trim(),
+    code: (zone.code || zone.name).toLowerCase().replace(/[^a-z0-9]/g, '-'),
+    description: zone.description || '',
+    centerLatitude: Number(zone.centerLatitude),
+    centerLongitude: Number(zone.centerLongitude),
+    radiusMeters: Number(zone.radiusMeters) || 1500,
+    isActive: zone.isActive ?? true,
+  };
+
+  let assignedId = `zone-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+
+  try {
+    const docRef = await addDoc(collection(db, ZONES_COLLECTION), {
+      ...newZoneData,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    assignedId = docRef.id;
+  } catch (err) {
+    console.warn('Firestore addDoc zone fallback to local cache:', err);
+  }
+
+  const localList = getLocalZones();
+  const fullZone: OperationalZone = {
+    id: assignedId,
+    ...newZoneData,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  const filteredList = localList.filter((z) => z.id !== assignedId);
+  saveLocalZones([...filteredList, fullZone]);
+  notifyLocalZoneSubscribers();
+
+  return assignedId;
+}
+
+/**
+ * Update an existing operational zone
+ */
+export async function updateOperationalZone(
+  id: string,
+  updates: Partial<OperationalZone>
+): Promise<void> {
+  try {
+    const zoneRef = doc(db, ZONES_COLLECTION, id);
+    await updateDoc(zoneRef, {
+      ...updates,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    console.warn('Firestore updateDoc zone fallback to local cache:', err);
+  }
+
+  const localList = getLocalZones();
+  const updatedList = localList.map((z) => (z.id === id ? { ...z, ...updates } : z));
+  saveLocalZones(updatedList);
+  notifyLocalZoneSubscribers();
+}
+
+/**
+ * Delete an operational zone
+ */
+export async function deleteOperationalZone(id: string): Promise<void> {
+  try {
+    const zoneRef = doc(db, ZONES_COLLECTION, id);
+    await deleteDoc(zoneRef);
+  } catch (err) {
+    console.warn('Firestore deleteDoc zone fallback to local cache:', err);
+  }
+
+  const localList = getLocalZones();
+  const filtered = localList.filter((z) => z.id !== id);
+  saveLocalZones(filtered);
+  notifyLocalZoneSubscribers();
+}
+
+import { ShuttleStation } from '../types';
+
+/**
+ * Validates if a user's GPS coordinates are within a zone's operational boundary radius.
+ * Geofencing starts with the station pins registered under that zone (e.g. 100m catchment from pins).
+ */
+export function checkLocationWithinZone(
+  lat: number,
+  lng: number,
+  zone: OperationalZone,
+  stations: ShuttleStation[] = []
+): { isWithinZone: boolean; distanceMeters: number; nearestStation?: ShuttleStation | null } {
+  const zonePins = stations.filter((s) => s.zoneId === zone.id && s.isActive !== false);
+
+  if (zonePins.length > 0) {
+    let minPinDist = Infinity;
+    let closestPin: ShuttleStation | null = null;
+
+    for (const pin of zonePins) {
+      const distKm = calculateDistanceKm(lat, lng, pin.latitude, pin.longitude);
+      const distMeters = Math.round(distKm * 1000);
+      if (distMeters < minPinDist) {
+        minPinDist = distMeters;
+        closestPin = pin;
+      }
+    }
+
+    const pinCatchmentRadius = closestPin?.radiusMeters || 100;
+    return {
+      isWithinZone: minPinDist <= pinCatchmentRadius,
+      distanceMeters: minPinDist,
+      nearestStation: closestPin,
+    };
+  }
+
+  // Fallback if no station pins are under the zone yet
+  if (!zone.centerLatitude || !zone.centerLongitude) {
+    return { isWithinZone: true, distanceMeters: 0 };
+  }
+
+  const distKm = calculateDistanceKm(lat, lng, zone.centerLatitude, zone.centerLongitude);
+  const distanceMeters = Math.round(distKm * 1000);
+  const maxRadiusMeters = zone.radiusMeters || 100;
+
+  return {
+    isWithinZone: distanceMeters <= maxRadiusMeters,
+    distanceMeters,
+  };
+}
+
+/**
+ * Finds the closest active zone to a given GPS location based on station pins under each zone
+ */
+export function findNearestZone(
+  lat: number,
+  lng: number,
+  zones: OperationalZone[],
+  stations: ShuttleStation[] = []
+): { nearestZone: OperationalZone | null; distanceMeters: number; isWithinBoundary: boolean; nearestStation: ShuttleStation | null } {
+  const activeZones = zones.filter((z) => z.isActive !== false);
+  if (activeZones.length === 0) {
+    return { nearestZone: null, distanceMeters: 0, isWithinBoundary: false, nearestStation: null };
+  }
+
+  let closestZone: OperationalZone | null = null;
+  let minZoneDistance = Infinity;
+  let closestStationPin: ShuttleStation | null = null;
+
+  for (const zone of activeZones) {
+    const check = checkLocationWithinZone(lat, lng, zone, stations);
+    if (check.distanceMeters < minZoneDistance) {
+      minZoneDistance = check.distanceMeters;
+      closestZone = zone;
+      closestStationPin = check.nearestStation || null;
+    }
+  }
+
+  const allowedRadius = closestStationPin?.radiusMeters || closestZone?.radiusMeters || 100;
+  const isWithin = closestZone ? minZoneDistance <= allowedRadius : false;
+
+  return {
+    nearestZone: closestZone,
+    distanceMeters: Math.round(minZoneDistance),
+    isWithinBoundary: isWithin,
+    nearestStation: closestStationPin,
+  };
+}

@@ -1,0 +1,189 @@
+import React from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+import { LogOut, AlertTriangle } from 'lucide-react';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../../firebase/config';
+import { PWAInstallButton } from '../PWAInstallPrompt';
+import officialLogo from '../../images/official_logo.jpg';
+import scsLogo from '../../images/scs_logo.jpg';
+import cctLogo from '../../images/cct_logo.jpg';
+import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
+
+export const DriverProfile: React.FC = () => {
+  const { currentUser, driverProfile, logout } = useAuth();
+
+  const handleDismissNotice = async () => {
+    if (currentUser) {
+      await updateDoc(doc(db, 'drivers', currentUser.uid), {
+        disconnectNotice: null,
+      });
+    }
+  };
+
+  return (
+    <div className="h-full overflow-y-auto bg-[#E3F2FD] text-[#0D47A1] p-4 pb-36 max-w-md mx-auto space-y-5">
+      <div className="pt-2 flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-black text-[#0D47A1]">
+            <span>Driver Profile</span>
+          </h2>
+          <p className="text-xs text-slate-500 font-medium">RFID credentials, active E-Shuttle pairing, and driver status</p>
+        </div>
+        <img
+          src={officialLogo}
+          onError={(e) => {
+            (e.target as HTMLImageElement).src = '/official_logo.jpg';
+          }}
+          alt="E-Shuttle Official Logo"
+          className="w-10 h-10 rounded-2xl object-cover border-2 border-[#0D47A1] shadow-md shrink-0"
+        />
+      </div>
+
+      {driverProfile?.disconnectNotice && (
+        <div className="bg-amber-50 border-2 border-amber-400 text-amber-900 text-xs p-3.5 rounded-2xl shadow-xl flex items-center justify-between gap-2 animate-pulse">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+            <span className="font-bold leading-tight">{driverProfile.disconnectNotice}</span>
+          </div>
+          <button
+            onClick={handleDismissNotice}
+            title="Dismiss notice"
+            className="bg-amber-600 hover:bg-amber-700 text-white font-black text-[10px] px-2.5 py-1.5 rounded-xl uppercase tracking-wider shrink-0 shadow-sm"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Profile & Vehicle Card */}
+      <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-5 space-y-4 shadow-xl">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 bg-[#0D47A1] rounded-2xl flex items-center justify-center text-white text-xl font-black shadow-md">
+            {driverProfile?.fullName?.charAt(0) || 'D'}
+          </div>
+          <div>
+            <h3 className="text-base font-black text-[#0D47A1]">{driverProfile?.fullName || 'Driver'}</h3>
+            <div className="flex items-center gap-2 mt-1">
+              <span
+                className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border ${
+                  driverProfile?.accountStatus === 'APPROVED'
+                    ? 'bg-[#E3F2FD] text-[#0D47A1] border-[#0D47A1]'
+                    : 'bg-amber-50 text-amber-800 border-amber-300'
+                }`}
+              >
+                {driverProfile?.accountStatus || 'PENDING'}
+              </span>
+              <div className="text-xs text-amber-500 font-bold bg-[#E3F2FD] border border-[#0D47A1] px-2 py-0.5 rounded-full">
+                <span>{driverProfile?.rating || 5.0} ★</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* RFID Physical Card Info */}
+        <div className="bg-[#F8FAFC] border border-[#0D47A1]/40 p-3 rounded-2xl space-y-1">
+          <div className="text-[10px] font-extrabold text-[#0D47A1] uppercase tracking-wider">
+            <span>Assigned Driver RFID Card</span>
+          </div>
+          {driverProfile?.rfidCardUid ? (
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-sm font-black text-[#0D47A1]">
+                {driverProfile.rfidCardUid}
+              </span>
+              <span
+                title="Tap your RFID card on the E-Shuttle device reader to take over"
+                className="text-[9px] font-black text-white bg-[#0D47A1] border border-[#0D47A1] px-2 py-0.5 rounded-full"
+              >
+                Tap to Take Over E-Shuttle
+              </span>
+            </div>
+          ) : (
+            <div className="text-xs text-slate-500 italic font-medium">
+              No RFID card linked yet. Contact Admin to pair your card.
+            </div>
+          )}
+        </div>
+
+        {/* Active E-Shuttle Pairing */}
+        <div className="bg-[#F8FAFC] border border-[#0D47A1]/40 p-3 rounded-2xl space-y-1">
+          <div className="text-[10px] font-extrabold text-[#0D47A1] uppercase tracking-wider">
+            <span>Current Paired E-Shuttle</span>
+          </div>
+          {driverProfile?.activeEbikeId ? (
+            <div>
+              <div className="text-sm font-bold text-[#0D47A1]">
+                {sanitizeVehicleInfo(driverProfile.vehicleInfo)}
+              </div>
+              <div className="text-xs text-[#0D47A1] font-bold mt-0.5">
+                Active Device: {driverProfile.activeEbikeId}
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs text-slate-500 italic font-medium">
+              Scan your RFID card on any E-Shuttle reader to automatically take over as active driver.
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-[#0D47A1]/30 pt-3 space-y-2 text-xs text-slate-600">
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400 uppercase font-mono text-[10px] font-bold">Email:</span>
+            <span className="font-bold text-[#0D47A1]">{driverProfile?.email}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400 uppercase font-mono text-[10px] font-bold">Phone:</span>
+            <span className="font-bold text-[#0D47A1]">{driverProfile?.phone || '+63 919 888 9999'}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Driver App Installation Card */}
+      <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-4 space-y-2 shadow-xl">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-black text-[#0D47A1] uppercase tracking-wider">Driver Terminal App</span>
+          <PWAInstallButton variant="compact" />
+        </div>
+        <p className="text-[11px] text-slate-500 font-medium">
+          Install the Driver Terminal app to your home screen for quick 1-tap access.
+        </p>
+        <PWAInstallButton />
+      </div>
+
+      <button
+        onClick={logout}
+        title="Sign out of driver account"
+        className="w-full py-3.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border-2 border-rose-300 rounded-2xl font-bold text-xs shadow-sm transition-colors uppercase tracking-wider flex items-center justify-center gap-2 active:scale-95"
+      >
+        <LogOut className="w-4 h-4" />
+        <span>Log Out</span>
+      </button>
+
+      {/* Institutional Accreditation */}
+      <div className="pt-1 flex items-center justify-center gap-4 opacity-75">
+        <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-semibold">
+          <img
+            src={cctLogo}
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = '/cct_logo.jpg';
+            }}
+            alt="CCT"
+            className="w-5 h-5 rounded-full object-cover border border-[#0D47A1]"
+          />
+          <span>CCT</span>
+        </div>
+        <div className="w-1 h-1 bg-[#0D47A1] rounded-full" />
+        <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-semibold">
+          <img
+            src={scsLogo}
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = '/scs_logo.jpg';
+            }}
+            alt="SCS"
+            className="w-5 h-5 rounded-full object-cover border border-[#0D47A1]"
+          />
+          <span>SCS</span>
+        </div>
+      </div>
+    </div>
+  );
+};
