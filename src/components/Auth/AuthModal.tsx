@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBackHandler } from '../../contexts/NativeBackContext';
 import officialLogo from '../../images/official_logo.jpg';
@@ -10,6 +10,36 @@ export const AuthModal: React.FC = () => {
 
   const [mode, setMode] = useState<'login' | 'register' | 'forgot' | 'admin_login'>('login');
   const [roleSelection, setRoleSelection] = useState<'customer' | 'driver'>('customer');
+
+  // Discrete 5-tap gesture state for Admin Portal access
+  const [logoTapCount, setLogoTapCount] = useState<number>(0);
+  const tapTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleLogoTap = () => {
+    if (tapTimerRef.current) {
+      clearTimeout(tapTimerRef.current);
+    }
+
+    const nextCount = logoTapCount + 1;
+
+    if (nextCount >= 5) {
+      setLogoTapCount(0);
+      if (mode === 'admin_login') {
+        setMode('login');
+        setErrorMsg(null);
+        setSuccessMsg(null);
+      } else {
+        setMode('admin_login');
+        setErrorMsg(null);
+        setSuccessMsg(null);
+      }
+    } else {
+      setLogoTapCount(nextCount);
+      tapTimerRef.current = setTimeout(() => {
+        setLogoTapCount(0);
+      }, 2500);
+    }
+  };
 
   // Handle native back button inside Auth views (returns to login)
   useBackHandler(
@@ -100,14 +130,14 @@ export const AuthModal: React.FC = () => {
         {/* Header Branding */}
         {mode === 'admin_login' ? (
           <div className="text-center space-y-2">
-            <div className="relative inline-block">
+            <div className="relative inline-block cursor-pointer" onClick={handleLogoTap}>
               <img
                 src={officialLogo}
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = '/official_logo.jpg';
                 }}
                 alt="E-Shuttle Official Logo"
-                className="w-16 h-16 rounded-2xl object-cover shadow-lg border-2 border-[#0D47A1] mx-auto"
+                className="w-16 h-16 rounded-2xl object-cover shadow-lg border-2 border-[#0D47A1] mx-auto active:scale-90 transition-transform"
               />
               <span className="absolute -bottom-1 -right-1 bg-[#0D47A1] text-white text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider shadow">
                 ADMIN
@@ -118,14 +148,16 @@ export const AuthModal: React.FC = () => {
           </div>
         ) : (
           <div className="text-center space-y-2">
-            <img
-              src={officialLogo}
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = '/official_logo.jpg';
-              }}
-              alt="E-Shuttle Official Logo"
-              className="w-16 h-16 rounded-2xl object-cover shadow-lg border-2 border-[#0D47A1] mx-auto"
-            />
+            <div className="relative inline-block cursor-pointer" onClick={handleLogoTap}>
+              <img
+                src={officialLogo}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = '/official_logo.jpg';
+                }}
+                alt="E-Shuttle Official Logo"
+                className="w-16 h-16 rounded-2xl object-cover shadow-lg border-2 border-[#0D47A1] mx-auto active:scale-90 transition-transform"
+              />
+            </div>
             <h2 className="text-xl font-black text-[#0D47A1]">E-Shuttle</h2>
             <p className="text-xs text-slate-500 font-medium">Urban E-Shuttle Transit Service</p>
           </div>
@@ -334,9 +366,9 @@ export const AuthModal: React.FC = () => {
           </button>
         </form>
 
-        {/* Separate Admin Portal Toggle Link */}
-        <div className="border-t border-[#0D47A1]/40 pt-3 text-center">
-          {mode === 'admin_login' ? (
+        {/* Return link when in Admin mode */}
+        {mode === 'admin_login' && (
+          <div className="border-t border-[#0D47A1]/40 pt-3 text-center">
             <button
               type="button"
               onClick={() => {
@@ -349,21 +381,8 @@ export const AuthModal: React.FC = () => {
             >
               Back to User / Driver Login
             </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                setMode('admin_login');
-                setErrorMsg(null);
-                setSuccessMsg(null);
-              }}
-              title="Switch to administrator access portal"
-              className="text-xs text-[#0D47A1] hover:underline font-bold transition-colors"
-            >
-              Admin Portal Login &rarr;
-            </button>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Partner / Institutional Accreditation Footer */}
         <div className="pt-2 border-t border-[#0D47A1]/30 flex items-center justify-center gap-4 opacity-85 hover:opacity-100 transition-opacity">
