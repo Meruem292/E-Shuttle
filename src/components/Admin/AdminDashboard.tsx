@@ -22,6 +22,7 @@ import { pairDriverRfidCard, subscribeToAdminRegistrationRfid } from '../../serv
 import { useBackHandler } from '../../contexts/NativeBackContext';
 import officialLogo from '../../images/official_logo.jpg';
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
+import { ChatFloatingButton } from '../Common/ChatFloatingButton';
 import {
   LogOut,
   CheckCircle,
@@ -1731,6 +1732,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* Global 2-Way Admin Support & Dispatch Floating Chat Button */}
+      <ChatFloatingButton />
     </div>
   );
 };

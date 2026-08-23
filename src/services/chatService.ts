@@ -1,0 +1,463 @@
+import {
+  collection,
+  doc,
+  addDoc,
+  setDoc,
+  getDoc,
+  getDocs,
+  updateDoc,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  serverTimestamp,
+  increment,
+  Timestamp,
+} from 'firebase/firestore';
+import { db } from '../firebase/config';
+
+export type ChatChannelType = 'booking' | 'user_driver' | 'user_admin' | 'driver_admin';
+
+export interface ChatMessage {
+  id: string;
+  channelId: string;
+  senderId: string;
+  senderName: string;
+  senderRole: 'customer' | 'driver' | 'admin';
+  text: string;
+  createdAt: any;
+  readBy?: string[];
+}
+
+export interface ChatChannel {
+  id: string;
+  channelType: ChatChannelType;
+  participants: string[]; // uids or 'admin'
+  participantNames: Record<string, string>;
+  participantRoles: Record<string, 'customer' | 'driver' | 'admin'>;
+  lastMessage?: string;
+  lastMessageTime?: any;
+  unreadCounts?: Record<string, number>;
+  bookingId?: string;
+  title?: string;
+  subtitle?: string;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+// Helper to construct channel IDs
+export function getChannelId(
+  type: ChatChannelType,
+  p1: string,
+  p2?: string,
+  bookingId?: string
+): string {
+  if (type === 'booking' && bookingId) {
+    return `booking_${bookingId}`;
+  }
+  if (type === 'user_admin') {
+    return `ua_${p1}`;
+  }
+  if (type === 'driver_admin') {
+    return `da_${p1}`;
+  }
+  if (type === 'user_driver' && p2) {
+    const sorted = [p1, p2].sort().join('_');
+    return `ud_${sorted}`;
+  }
+  return `channel_${p1}_${p2 || ''}`;
+}
+
+// Local storage fallback keys
+const LOCAL_MESSAGES_KEY = 'eshuttle_chat_messages_v1';
+const LOCAL_CHANNELS_KEY = 'eshuttle_chat_channels_v1';
+
+function getLocalChannels(): ChatChannel[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_CHANNELS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalChannels(channels: ChatChannel[]) {
+  try {
+    localStorage.setItem(LOCAL_CHANNELS_KEY, JSON.stringify(channels));
+  } catch (e) {
+    console.warn('Failed to save local channels', e);
+  }
+}
+
+function getLocalMessages(channelId: string): ChatMessage[] {
+  try {
+    const raw = localStorage.getItem(`${LOCAL_MESSAGES_KEY}_${channelId}`);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalMessages(channelId: string, messages: ChatMessage[]) {
+  try {
+    localStorage.setItem(`${LOCAL_MESSAGES_KEY}_${channelId}`, JSON.stringify(messages));
+  } catch (e) {
+    console.warn('Failed to save local messages', e);
+  }
+}
+
+// Notify local tab subscribers
+const localSubscribers = new Set<() => void>();
+function notifyLocalSubscribers() {
+  localSubscribers.forEach((cb) => cb());
+}
+
+// 1. Get or Create Chat Channel
+export async function getOrCreateChannel(
+  type: ChatChannelType,
+  creator: { id: string; name: string; role: 'customer' | 'driver' | 'admin' },
+  target?: { id: string; name: string; role: 'customer' | 'driver' | 'admin' },
+  bookingId?: string,
+  titleOverride?: string,
+  subtitleOverride?: string
+): Promise<string> {
+  const channelId = getChannelId(type, creator.id, target?.id, bookingId);
+  const channelRef = doc(db, 'chatChannels', channelId);
+
+  const participants = [creator.id];
+  if (target?.id && target.id !== creator.id) {
+    participants.push(target.id);
+  }
+  if (type === 'user_admin' || type === 'driver_admin') {
+    if (!participants.includes('admin')) {
+      participants.push('admin');
+    }
+  }
+
+  const participantNames: Record<string, string> = {
+    [creator.id]: creator.name,
+  };
+  const participantRoles: Record<string, 'customer' | 'driver' | 'admin'> = {
+    [creator.id]: creator.role,
+  };
+
+  if (target) {
+    participantNames[target.id] = target.name;
+    participantRoles[target.id] = target.role;
+  }
+  if (type === 'user_admin' || type === 'driver_admin') {
+    participantNames['admin'] = 'E-Shuttle Admin Support';
+    participantRoles['admin'] = 'admin';
+  }
+
+  let defaultTitle = titleOverride || 'Support Chat';
+  let defaultSubtitle = subtitleOverride || '';
+
+  if (type === 'booking') {
+    defaultTitle = titleOverride || `Ride Chat #${bookingId?.slice(-6) || ''}`;
+    defaultSubtitle = `${creator.name} & ${target?.name || 'Driver'}`;
+  } else if (type === 'user_driver') {
+    defaultTitle = `${creator.name} & ${target?.name || 'Driver'}`;
+    defaultSubtitle = 'Direct Chat';
+  } else if (type === 'user_admin') {
+    defaultTitle = `Customer Support (${creator.name})`;
+    defaultSubtitle = '2-Way Admin Help Channel';
+  } else if (type === 'driver_admin') {
+    defaultTitle = `Driver Dispatch Support (${creator.name})`;
+    defaultSubtitle = '2-Way Admin Dispatch Channel';
+  }
+
+  const unreadCounts: Record<string, number> = {};
+  participants.forEach((p) => {
+    unreadCounts[p] = 0;
+  });
+
+  const payload: ChatChannel = {
+    id: channelId,
+    channelType: type,
+    participants,
+    participantNames,
+    participantRoles,
+    lastMessage: 'Channel opened',
+    lastMessageTime: new Date().toISOString(),
+    unreadCounts,
+    bookingId: bookingId || undefined,
+    title: defaultTitle,
+    subtitle: defaultSubtitle,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  try {
+    const snap = await getDoc(channelRef);
+    if (!snap.exists()) {
+      await setDoc(channelRef, {
+        ...payload,
+        lastMessageTime: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
+  } catch (err) {
+    console.warn('Firestore channel fetch failed, saving to local cache:', err);
+    const localChans = getLocalChannels();
+    if (!localChans.some((c) => c.id === channelId)) {
+      saveLocalChannels([payload, ...localChans]);
+      notifyLocalSubscribers();
+    }
+  }
+
+  return channelId;
+}
+
+// 2. Send Message
+export async function sendChatMessage(
+  channelId: string,
+  senderId: string,
+  senderName: string,
+  senderRole: 'customer' | 'driver' | 'admin',
+  text: string
+): Promise<void> {
+  const cleanText = text.trim();
+  if (!cleanText) return;
+
+  const nowIso = new Date().toISOString();
+  const msgData = {
+    channelId,
+    senderId,
+    senderName,
+    senderRole,
+    text: cleanText,
+    createdAt: serverTimestamp(),
+    readBy: [senderId],
+  };
+
+  const channelRef = doc(db, 'chatChannels', channelId);
+  const messagesColRef = collection(db, 'chatChannels', channelId, 'messages');
+
+  let firestoreSuccess = false;
+  try {
+    const msgDoc = await addDoc(messagesColRef, msgData);
+
+    // Update parent channel doc with last message and unread count
+    const chanSnap = await getDoc(channelRef);
+    if (chanSnap.exists()) {
+      const cData = chanSnap.data() as ChatChannel;
+      const updatedUnread = { ...(cData.unreadCounts || {}) };
+      (cData.participants || []).forEach((p) => {
+        if (p !== senderId) {
+          updatedUnread[p] = (updatedUnread[p] || 0) + 1;
+        }
+      });
+
+      await updateDoc(channelRef, {
+        lastMessage: cleanText,
+        lastMessageTime: serverTimestamp(),
+        unreadCounts: updatedUnread,
+        updatedAt: serverTimestamp(),
+      });
+    }
+    firestoreSuccess = true;
+  } catch (err) {
+    console.warn('Firestore send message failed, writing to local storage:', err);
+  }
+
+  // Always update local cache so messages render immediately offline or online
+  const localMsgs = getLocalMessages(channelId);
+  const localMsgObj: ChatMessage = {
+    id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    channelId,
+    senderId,
+    senderName,
+    senderRole,
+    text: cleanText,
+    createdAt: nowIso,
+    readBy: [senderId],
+  };
+  saveLocalMessages(channelId, [...localMsgs, localMsgObj]);
+
+  const localChans = getLocalChannels();
+  const existingChanIdx = localChans.findIndex((c) => c.id === channelId);
+  if (existingChanIdx >= 0) {
+    const chan = localChans[existingChanIdx];
+    chan.lastMessage = cleanText;
+    chan.lastMessageTime = nowIso;
+    const unreads = { ...(chan.unreadCounts || {}) };
+    (chan.participants || []).forEach((p) => {
+      if (p !== senderId) unreads[p] = (unreads[p] || 0) + 1;
+    });
+    chan.unreadCounts = unreads;
+    localChans[existingChanIdx] = chan;
+    saveLocalChannels(localChans);
+  }
+
+  notifyLocalSubscribers();
+}
+
+// 3. Subscribe to Real-time Messages in a Channel
+export function subscribeToMessages(
+  channelId: string,
+  callback: (messages: ChatMessage[]) => void
+): () => void {
+  const messagesColRef = collection(db, 'chatChannels', channelId, 'messages');
+  const q = query(messagesColRef, orderBy('createdAt', 'asc'));
+
+  let unsubFirestore: (() => void) | null = null;
+
+  try {
+    unsubFirestore = onSnapshot(
+      q,
+      (snapshot) => {
+        const msgs: ChatMessage[] = [];
+        snapshot.forEach((d) => {
+          const data = d.data();
+          const createdTime =
+            data.createdAt instanceof Timestamp
+              ? data.createdAt.toDate().toISOString()
+              : data.createdAt || new Date().toISOString();
+
+          msgs.push({
+            id: d.id,
+            channelId,
+            senderId: data.senderId,
+            senderName: data.senderName,
+            senderRole: data.senderRole,
+            text: data.text,
+            createdAt: createdTime,
+            readBy: data.readBy || [],
+          });
+        });
+
+        if (msgs.length > 0) {
+          saveLocalMessages(channelId, msgs);
+          callback(msgs);
+        } else {
+          // Fallback to local
+          callback(getLocalMessages(channelId));
+        }
+      },
+      (err) => {
+        if (err.code !== 'permission-denied') {
+          console.error('Error listening to chat messages:', err);
+        }
+        callback(getLocalMessages(channelId));
+      }
+    );
+  } catch (err) {
+    callback(getLocalMessages(channelId));
+  }
+
+  const localHandler = () => {
+    callback(getLocalMessages(channelId));
+  };
+  localSubscribers.add(localHandler);
+
+  return () => {
+    if (unsubFirestore) unsubFirestore();
+    localSubscribers.delete(localHandler);
+  };
+}
+
+// 4. Subscribe to All Channels for User / Driver / Admin
+export function subscribeToUserChannels(
+  uid: string,
+  role: 'customer' | 'driver' | 'admin',
+  callback: (channels: ChatChannel[]) => void
+): () => void {
+  const channelsRef = collection(db, 'chatChannels');
+  let q;
+
+  if (role === 'admin') {
+    q = query(channelsRef);
+  } else {
+    q = query(channelsRef, where('participants', 'array-contains', uid));
+  }
+
+  let unsubFirestore: (() => void) | null = null;
+
+  try {
+    unsubFirestore = onSnapshot(
+      q,
+      (snapshot) => {
+        const chans: ChatChannel[] = [];
+        snapshot.forEach((d) => {
+          const data = d.data() as ChatChannel;
+          const updatedTime =
+            data.updatedAt instanceof Timestamp
+              ? data.updatedAt.toDate().toISOString()
+              : data.updatedAt || new Date().toISOString();
+
+          chans.push({
+            ...data,
+            id: d.id,
+            updatedAt: updatedTime,
+          });
+        });
+
+        chans.sort((a, b) => {
+          const tA = new Date(a.updatedAt || a.lastMessageTime || 0).getTime();
+          const tB = new Date(b.updatedAt || b.lastMessageTime || 0).getTime();
+          return tB - tA;
+        });
+
+        if (chans.length > 0) {
+          saveLocalChannels(chans);
+          callback(chans);
+        } else {
+          callback(filterLocalChannels(uid, role));
+        }
+      },
+      (err) => {
+        if (err.code !== 'permission-denied') {
+          console.error('Error listening to user channels:', err);
+        }
+        callback(filterLocalChannels(uid, role));
+      }
+    );
+  } catch {
+    callback(filterLocalChannels(uid, role));
+  }
+
+  const localHandler = () => {
+    callback(filterLocalChannels(uid, role));
+  };
+  localSubscribers.add(localHandler);
+
+  return () => {
+    if (unsubFirestore) unsubFirestore();
+    localSubscribers.delete(localHandler);
+  };
+}
+
+function filterLocalChannels(uid: string, role: 'customer' | 'driver' | 'admin'): ChatChannel[] {
+  const all = getLocalChannels();
+  if (role === 'admin') return all;
+  return all.filter((c) => c.participants && c.participants.includes(uid));
+}
+
+// 5. Mark Channel as Read
+export async function markChannelAsRead(channelId: string, uid: string): Promise<void> {
+  const channelRef = doc(db, 'chatChannels', channelId);
+  try {
+    const snap = await getDoc(channelRef);
+    if (snap.exists()) {
+      const cData = snap.data() as ChatChannel;
+      const unreads = { ...(cData.unreadCounts || {}) };
+      unreads[uid] = 0;
+      await updateDoc(channelRef, {
+        unreadCounts: unreads,
+      });
+    }
+  } catch (err) {
+    console.warn('Firestore mark read error:', err);
+  }
+
+  const localChans = getLocalChannels();
+  const idx = localChans.findIndex((c) => c.id === channelId);
+  if (idx >= 0) {
+    localChans[idx].unreadCounts = localChans[idx].unreadCounts || {};
+    localChans[idx].unreadCounts![uid] = 0;
+    saveLocalChannels(localChans);
+    notifyLocalSubscribers();
+  }
+}

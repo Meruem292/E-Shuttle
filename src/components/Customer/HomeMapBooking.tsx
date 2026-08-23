@@ -16,7 +16,9 @@ import {
   Navigation,
   Compass,
   Layers,
+  MessageSquare,
 } from 'lucide-react';
+import { ChatFloatingButton } from '../Common/ChatFloatingButton';
 import {
   calculateFare,
   calculateDistanceKm,
@@ -66,6 +68,63 @@ export const HomeMapBooking: React.FC = () => {
   const [isBookingLoading, setIsBookingLoading] = useState<boolean>(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [isLocatingGps, setIsLocatingGps] = useState<boolean>(false);
+  const hasGpsAcquiredRef = React.useRef<boolean>(false);
+
+  // Auto-acquire device GPS immediately upon opening the app
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+
+    setIsLocatingGps(true);
+
+    const handleGpsSuccess = (position: GeolocationPosition) => {
+      const { latitude, longitude } = position.coords;
+      hasGpsAcquiredRef.current = true;
+      setIsLocatingGps(false);
+
+      setPickup((prev) => {
+        // Don't overwrite if user actively customized or has active booking
+        if (activeBooking) return prev;
+
+        const check = checkLocationWithinStationArea(latitude, longitude, stations, 'pickup');
+        let addr = `Current Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`;
+
+        if (check.isWithinRadius && check.nearestStation) {
+          addr = `GPS: Near ${check.nearestStation.name} (${check.distanceMeters}m)`;
+        } else if (check.nearestStation) {
+          addr = `Current GPS (${check.distanceMeters >= 1000 ? (check.distanceMeters / 1000).toFixed(1) + 'km' : check.distanceMeters + 'm'} from ${check.nearestStation.name})`;
+        }
+
+        return {
+          latitude,
+          longitude,
+          address: addr,
+        };
+      });
+    };
+
+    const handleGpsError = (err: GeolocationPositionError) => {
+      console.warn('Auto GPS location acquisition notice:', err.message);
+      setIsLocatingGps(false);
+    };
+
+    // 1. Initial high-accuracy location lookup
+    navigator.geolocation.getCurrentPosition(handleGpsSuccess, handleGpsError, {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0,
+    });
+
+    // 2. Continuous watch position to keep live GPS updated as user moves
+    const watchId = navigator.geolocation.watchPosition(handleGpsSuccess, handleGpsError, {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 3000,
+    });
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [stations, activeBooking]);
 
   // Rating Modal
   const [showRatingModal, setShowRatingModal] = useState<boolean>(false);
@@ -134,8 +193,8 @@ export const HomeMapBooking: React.FC = () => {
       setStations(list);
       setStationsLoading(false);
 
-      // If initial station exists and pickup is not customized, set to first active station
-      if (list.length > 0 && (!pickup.address || pickup.address === 'Central Station Hub')) {
+      // If initial station exists and GPS has not been acquired yet, set to first active station as temporary fallback
+      if (!hasGpsAcquiredRef.current && list.length > 0 && (!pickup.address || pickup.address === 'Central Station Hub')) {
         const firstActive = list.find((s) => s.isActive !== false) || list[0];
         setPickup({
           latitude: firstActive.latitude,
@@ -1060,6 +1119,20 @@ export const HomeMapBooking: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Global 2-Way Chat Floating Button */}
+      <ChatFloatingButton
+        initialBookingId={activeBooking?.id}
+        initialTargetUser={
+          activeBooking?.driverId
+            ? {
+                id: activeBooking.driverId,
+                name: activeBooking.driverName || 'Driver',
+                role: 'driver',
+              }
+            : undefined
+        }
+      />
     </div>
   );
 };

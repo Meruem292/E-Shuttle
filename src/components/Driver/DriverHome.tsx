@@ -25,6 +25,7 @@ import { doc, updateDoc, onSnapshot, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../firebase/config';
 import officialLogo from '../../images/official_logo.jpg';
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
+import { ChatFloatingButton } from '../Common/ChatFloatingButton';
 
 export const DriverHome: React.FC = () => {
   const { driverProfile, currentUser } = useAuth();
@@ -116,39 +117,44 @@ export const DriverHome: React.FC = () => {
     return () => unsub();
   }, [driverProfile, availability, activeRide]);
 
-  // 3. Periodic driver / e-shuttle location update
+  // 3. Periodic driver / e-shuttle location update & automatic device GPS watch
   useEffect(() => {
-    if (!currentUser || availability === 'OFFLINE' || !driverProfile) return;
+    if (!navigator.geolocation || !currentUser) return;
 
-    const interval = setInterval(async () => {
-      const currentLoc = driverProfile.currentLocation || {
-        latitude: 14.5547,
-        longitude: 121.0244,
-        address: 'Central E-Shuttle Hub',
-      };
-
-      const jitterLat = currentLoc.latitude + (Math.random() - 0.5) * 0.0008;
-      const jitterLng = currentLoc.longitude + (Math.random() - 0.5) * 0.0008;
-
-      try {
-        if (driverProfile.activeEbikeId) {
-          // Sync E-Shuttle device GPS telemetry, which automatically mirrors to Driver and Customer Booking
-          await updateEBikeGpsLocation(driverProfile.activeEbikeId, jitterLat, jitterLng, 22);
-        } else {
-          const updatedPoint: LocationPoint = {
-            latitude: jitterLat,
-            longitude: jitterLng,
-            address: currentLoc.address,
-          };
-          await updateDriverLocation(currentUser.uid, updatedPoint, activeRide?.id);
+    const handleDriverGpsSuccess = async (position: GeolocationPosition) => {
+      const { latitude, longitude } = position.coords;
+      if (availability === 'ONLINE' && driverProfile) {
+        try {
+          if (driverProfile.activeEbikeId) {
+            await updateEBikeGpsLocation(driverProfile.activeEbikeId, latitude, longitude, 22);
+          } else {
+            const updatedPoint: LocationPoint = {
+              latitude,
+              longitude,
+              address: driverProfile.currentLocation?.address || 'Live Driver GPS Location',
+            };
+            await updateDriverLocation(currentUser.uid, updatedPoint, activeRide?.id);
+          }
+        } catch (err) {
+          console.error('Error updating driver live GPS:', err);
         }
-      } catch (err) {
-        console.error('Error updating driver location:', err);
       }
-    }, 8000);
+    };
 
-    return () => clearInterval(interval);
-  }, [currentUser, availability, activeRide, driverProfile]);
+    navigator.geolocation.getCurrentPosition(handleDriverGpsSuccess, () => {}, {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0,
+    });
+
+    const watchId = navigator.geolocation.watchPosition(handleDriverGpsSuccess, () => {}, {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 3000,
+    });
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [currentUser, availability, driverProfile, activeRide?.id]);
 
   // Toggle Online/Offline State
   const handleToggleOnline = async () => {
@@ -534,6 +540,20 @@ export const DriverHome: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Global 2-Way Chat Floating Button for Drivers & Dispatch */}
+      <ChatFloatingButton
+        initialBookingId={activeRide?.id}
+        initialTargetUser={
+          activeRide?.customerId
+            ? {
+                id: activeRide.customerId,
+                name: activeRide.customerName || 'Passenger',
+                role: 'customer',
+              }
+            : undefined
+        }
+      />
     </div>
   );
 };
