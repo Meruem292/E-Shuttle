@@ -27,8 +27,9 @@ import {
 import {
   listenToShuttleStations,
   checkLocationWithinStationArea,
+  calculateDistanceMeters,
 } from '../../services/stationService';
-import { listenToOperationalZones, checkLocationWithinZone } from '../../services/zoneService';
+import { listenToOperationalZones, checkLocationWithinZone, findNearestZone } from '../../services/zoneService';
 import {
   createBooking,
   updateBookingStatus,
@@ -46,6 +47,7 @@ export const HomeMapBooking: React.FC = () => {
   // Operational Zones & Designated Stations from Firestore
   const [zones, setZones] = useState<OperationalZone[]>([]);
   const [selectedZoneId, setSelectedZoneId] = useState<string>('all');
+  const [detectedUserZone, setDetectedUserZone] = useState<OperationalZone | null>(null);
   const [stations, setStations] = useState<ShuttleStation[]>([]);
   const [stationsLoading, setStationsLoading] = useState<boolean>(true);
 
@@ -70,6 +72,33 @@ export const HomeMapBooking: React.FC = () => {
   const [isLocatingGps, setIsLocatingGps] = useState<boolean>(false);
   const [hasGpsAcquired, setHasGpsAcquired] = useState<boolean>(false);
   const hasGpsAcquiredRef = React.useRef<boolean>(false);
+
+  // Auto-detect operational zone based on user's current GPS / pickup coordinates
+  useEffect(() => {
+    if (!pickup.latitude || !pickup.longitude || zones.length === 0) return;
+
+    // 1. Try to find zone matching coordinates directly
+    const nearest = findNearestZone(pickup.latitude, pickup.longitude, zones, stations);
+    if (nearest.nearestZone) {
+      setDetectedUserZone(nearest.nearestZone);
+      if (selectedZoneId === 'all' || selectedZoneId === 'auto') {
+        setSelectedZoneId(nearest.nearestZone.id);
+      }
+      return;
+    }
+
+    // 2. Fallback: check if nearest station has a zone ID
+    const stationCheck = checkLocationWithinStationArea(pickup.latitude, pickup.longitude, stations);
+    if (stationCheck.nearestStation?.zoneId) {
+      const matchedZone = zones.find((z) => z.id === stationCheck.nearestStation!.zoneId);
+      if (matchedZone) {
+        setDetectedUserZone(matchedZone);
+        if (selectedZoneId === 'all' || selectedZoneId === 'auto') {
+          setSelectedZoneId(matchedZone.id);
+        }
+      }
+    }
+  }, [pickup.latitude, pickup.longitude, zones, stations]);
 
   // Auto-acquire device GPS immediately upon opening the app
   useEffect(() => {
@@ -497,8 +526,23 @@ export const HomeMapBooking: React.FC = () => {
     return stations.filter((s) => s.isActive !== false);
   }, [stations]);
 
-  // If pickup station has a designated zone, restrict drop-off choices to the same zone
-  const pickupStationZoneId = proximityCheck.nearestStation?.zoneId;
+  // Zone derived from nearest station OR user's GPS detected zone
+  const pickupStationZoneId = proximityCheck.nearestStation?.zoneId || detectedUserZone?.id;
+
+  // Effective zone active for station filtering
+  const effectiveZoneId = useMemo(() => {
+    if (selectedZoneId && selectedZoneId !== 'all') {
+      return selectedZoneId;
+    }
+    return pickupStationZoneId;
+  }, [selectedZoneId, pickupStationZoneId]);
+
+  const activeZoneObj = useMemo(() => {
+    if (effectiveZoneId) {
+      return zones.find((z) => z.id === effectiveZoneId) || detectedUserZone;
+    }
+    return detectedUserZone;
+  }, [effectiveZoneId, zones, detectedUserZone]);
 
   const filteredDestinationStations = useMemo(() => {
     let allowed = activeStations.filter(
@@ -519,16 +563,43 @@ export const HomeMapBooking: React.FC = () => {
   }, [activeStations, destinationSearch, pickupStationZoneId]);
 
   const filteredPickupStations = useMemo(() => {
-    const allowed = activeStations.filter(
+    let allowed = activeStations.filter(
       (s) => s.allowedType !== 'dropoff_only' && s.allowPickup !== false
     );
-    if (!pickupSearch.trim()) return allowed;
-    return allowed.filter(
-      (s) =>
-        s.name.toLowerCase().includes(pickupSearch.toLowerCase()) ||
-        s.address.toLowerCase().includes(pickupSearch.toLowerCase())
-    );
-  }, [activeStations, pickupSearch]);
+
+    // Filter by effective zone if selected or auto-detected
+    if (effectiveZoneId) {
+      const inZone = allowed.filter((s) => !s.zoneId || s.zoneId === effectiveZoneId);
+      if (inZone.length > 0) {
+        allowed = inZone;
+      }
+    }
+
+    if (pickupSearch.trim()) {
+      allowed = allowed.filter(
+        (s) =>
+          s.name.toLowerCase().includes(pickupSearch.toLowerCase()) ||
+          s.address.toLowerCase().includes(pickupSearch.toLowerCase())
+      );
+    }
+
+    // Sort by proximity to user's current GPS / pickup coordinates
+    if (pickup.latitude && pickup.longitude) {
+      return [...allowed].sort((a, b) => {
+        const distA = calculateDistanceMeters(pickup.latitude, pickup.longitude, a.latitude, a.longitude);
+        const distB = calculateDistanceMeters(pickup.latitude, pickup.longitude, b.latitude, b.longitude);
+        return distA - distB;
+      });
+    }
+
+    return allowed;
+  }, [activeStations, pickupSearch, effectiveZoneId, pickup]);
+
+  // Stations visible on map (filtered by pickup station zone if a station with a zone is selected)
+  const displayStationsOnMap = useMemo(() => {
+    if (!pickupStationZoneId) return stations;
+    return stations.filter((s) => !s.zoneId || s.zoneId === pickupStationZoneId);
+  }, [stations, pickupStationZoneId]);
 
   // Shuttles visible to customer (filtered by zone if user has picked a station with a zone)
   const displayOnlineDrivers = useMemo(() => {
@@ -576,7 +647,7 @@ export const HomeMapBooking: React.FC = () => {
           destination={destination}
           driverLocation={activeBooking?.driverLocation || null}
           nearbyDrivers={activeBooking ? [] : displayOnlineDrivers}
-          stations={stations}
+          stations={displayStationsOnMap}
           onStationTag={handleDirectStationTag}
           isSelectingLocation={isSelectingOnMap}
           onLocationSelect={handleMapLocationSelect}
@@ -922,20 +993,76 @@ export const HomeMapBooking: React.FC = () => {
       {/* PICKUP STATION SELECTION MODAL */}
       {showPickupModal && (
         <div className="fixed inset-0 z-50 bg-[#0D47A1]/30 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white border-2 border-[#0D47A1] rounded-3xl w-full max-w-md p-5 space-y-4 max-h-[85vh] flex flex-col shadow-2xl text-[#0D47A1]">
+          <div className="bg-white border-2 border-[#0D47A1] rounded-3xl w-full max-w-md p-5 space-y-3.5 max-h-[85vh] flex flex-col shadow-2xl text-[#0D47A1]">
             <div className="flex items-center justify-between border-b border-[#0D47A1]/20 pb-3">
-              <h3 className="text-base font-black text-[#0D47A1] flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-[#0D47A1]" />
-                <span>Select Pick-up Station</span>
-              </h3>
+              <div>
+                <h3 className="text-base font-black text-[#0D47A1] flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-[#0D47A1]" />
+                  <span>Select Pick-up Station</span>
+                </h3>
+                {activeZoneObj && (
+                  <div className="text-[10px] text-emerald-800 font-bold flex items-center gap-1 mt-0.5">
+                    <Crosshair className="w-3 h-3 text-emerald-600 animate-pulse" />
+                    <span>Area: <b>{activeZoneObj.name}</b> (GPS Auto-Selected)</span>
+                  </div>
+                )}
+              </div>
               <button
                 onClick={() => setShowPickupModal(false)}
-                className="text-[#0D47A1] hover:bg-[#0D47A1] hover:text-white px-2.5 py-1 rounded-lg bg-[#E3F2FD] text-xs font-bold uppercase flex items-center gap-1 border border-[#0D47A1] transition-colors"
+                className="text-[#0D47A1] hover:bg-[#0D47A1] hover:text-white px-2.5 py-1 rounded-lg bg-[#E3F2FD] text-xs font-bold uppercase flex items-center gap-1 border border-[#0D47A1] transition-colors shrink-0"
               >
                 <X className="w-3.5 h-3.5" />
                 <span>Close</span>
               </button>
             </div>
+
+            {/* Operational Zone Filter Chips */}
+            {zones.length > 0 && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">
+                  <span>Filter Area Zone</span>
+                  <span className="text-[#0D47A1] font-extrabold">{filteredPickupStations.length} Suggested Stops</span>
+                </div>
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                  <button
+                    onClick={() => setSelectedZoneId('all')}
+                    className={`px-3 py-1 rounded-xl text-[10px] font-extrabold uppercase shrink-0 transition-all border ${
+                      selectedZoneId === 'all'
+                        ? 'bg-[#0D47A1] text-white border-[#0D47A1] shadow-sm'
+                        : 'bg-[#F8FAFC] text-[#0D47A1] border-[#0D47A1]/30 hover:bg-[#E3F2FD]'
+                    }`}
+                  >
+                    All Areas ({activeStations.length})
+                  </button>
+
+                  {zones.map((z) => {
+                    const isDetected = detectedUserZone?.id === z.id;
+                    const isSelected = selectedZoneId === z.id || (selectedZoneId === 'all' && isDetected);
+                    const count = activeStations.filter((s) => s.zoneId === z.id).length;
+
+                    return (
+                      <button
+                        key={z.id}
+                        onClick={() => setSelectedZoneId(z.id)}
+                        className={`px-3 py-1 rounded-xl text-[10px] font-extrabold uppercase shrink-0 transition-all border flex items-center gap-1.5 ${
+                          isSelected
+                            ? 'bg-[#0D47A1] text-white border-[#0D47A1] shadow-sm'
+                            : isDetected
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-400 font-black'
+                            : 'bg-[#F8FAFC] text-[#0D47A1] border-[#0D47A1]/30 hover:bg-[#E3F2FD]'
+                        }`}
+                      >
+                        {isDetected && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />}
+                        <span>{z.name}</span>
+                        <span className={`text-[9px] px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-white/20 text-white' : 'bg-[#E3F2FD] text-[#0D47A1]'}`}>
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Search filter */}
             <div className="relative">
@@ -950,35 +1077,47 @@ export const HomeMapBooking: React.FC = () => {
             </div>
 
             <div className="overflow-y-auto space-y-2 flex-1 pr-1">
-              {filteredPickupStations.map((st) => (
-                <button
-                  key={st.id}
-                  onClick={() => {
-                    setPickup({
-                      latitude: st.latitude,
-                      longitude: st.longitude,
-                      address: `${st.name} (${st.address})`,
-                    });
-                    setBookingError(null);
-                    setShowPickupModal(false);
-                  }}
-                  className="w-full text-left p-3 rounded-2xl bg-[#F8FAFC] hover:bg-[#E3F2FD] border border-[#0D47A1]/30 hover:border-[#0D47A1] flex items-start gap-3 transition-colors group"
-                >
-                  <div className="w-8 h-8 rounded-xl bg-[#E3F2FD] border border-[#0D47A1] flex items-center justify-center text-[#0D47A1] shrink-0 group-hover:bg-[#0D47A1] group-hover:text-white transition-colors">
-                    <MapPin className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-1">
-                      <div className="text-sm font-bold text-[#0D47A1] truncate">{st.name}</div>
-                      <span className="text-[9px] font-bold text-white bg-[#0D47A1] px-1.5 py-0.5 rounded uppercase">
-                        {st.category || 'Stop'}
-                      </span>
+              {filteredPickupStations.map((st) => {
+                const distMeters = pickup.latitude && pickup.longitude ? calculateDistanceMeters(pickup.latitude, pickup.longitude, st.latitude, st.longitude) : null;
+                const formattedDist = distMeters !== null ? (distMeters >= 1000 ? `${(distMeters / 1000).toFixed(1)} km` : `${distMeters}m away`) : null;
+
+                return (
+                  <button
+                    key={st.id}
+                    onClick={() => {
+                      setPickup({
+                        latitude: st.latitude,
+                        longitude: st.longitude,
+                        address: `${st.name} (${st.address})`,
+                      });
+                      setBookingError(null);
+                      setShowPickupModal(false);
+                    }}
+                    className="w-full text-left p-3 rounded-2xl bg-[#F8FAFC] hover:bg-[#E3F2FD] border border-[#0D47A1]/30 hover:border-[#0D47A1] flex items-start gap-3 transition-colors group"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-[#E3F2FD] border border-[#0D47A1] flex items-center justify-center text-[#0D47A1] shrink-0 group-hover:bg-[#0D47A1] group-hover:text-white transition-colors">
+                      <MapPin className="w-4 h-4" />
                     </div>
-                    <div className="text-xs text-slate-500 truncate">{st.address}</div>
-                    {st.description && <div className="text-[10px] text-slate-400 italic truncate mt-0.5">{st.description}</div>}
-                  </div>
-                </button>
-              ))}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-1">
+                        <div className="text-sm font-bold text-[#0D47A1] truncate">{st.name}</div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {formattedDist && (
+                            <span className="text-[9px] font-mono font-extrabold text-emerald-800 bg-emerald-100 border border-emerald-300 px-1.5 py-0.5 rounded">
+                              {formattedDist}
+                            </span>
+                          )}
+                          <span className="text-[9px] font-bold text-white bg-[#0D47A1] px-1.5 py-0.5 rounded uppercase">
+                            {st.category || 'Stop'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-xs text-slate-500 truncate">{st.address}</div>
+                      {st.description && <div className="text-[10px] text-slate-400 italic truncate mt-0.5">{st.description}</div>}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
 
             <button

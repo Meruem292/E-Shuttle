@@ -176,33 +176,36 @@ export const ZoneManagement: React.FC = () => {
         dashArray: '6, 6',
       }).addTo(group);
 
-      // Render Station Pins & 100m Fencing Circles under this Zone
-      const zoneStations = stations.filter((s) => s.zoneId === zone.id && s.isActive !== false);
-      zoneStations.forEach((st) => {
-        if (!st.latitude || !st.longitude) return;
+      // Render Station Pins & 100m Fencing Circles ONLY for this Zone if no zone is selected OR if this is the selected zone
+      const shouldRenderStationPins = !selectedZone || selectedZone.id === zone.id;
+      if (shouldRenderStationPins) {
+        const zoneStations = stations.filter((s) => s.zoneId === zone.id && s.isActive !== false);
+        zoneStations.forEach((st) => {
+          if (!st.latitude || !st.longitude) return;
 
-        // 100m Station Pin Geofence Catchment Circle
-        L.circle([st.latitude, st.longitude], {
-          radius: st.radiusMeters || 100,
-          color: '#10B981',
-          weight: 2,
-          fillColor: '#10B981',
-          fillOpacity: 0.18,
-        }).addTo(group);
+          // 100m Station Pin Geofence Catchment Circle
+          L.circle([st.latitude, st.longitude], {
+            radius: st.radiusMeters || 100,
+            color: '#10B981',
+            weight: 2,
+            fillColor: '#10B981',
+            fillOpacity: 0.18,
+          }).addTo(group);
 
-        const pinIcon = L.divIcon({
-          className: 'zone-station-pin',
-          html: `
-            <div class="flex items-center gap-1 bg-emerald-600 text-white font-black text-[9px] px-2 py-0.5 rounded-full border border-white shadow-lg whitespace-nowrap">
-              <span>📍</span>
-              <span class="truncate max-w-[100px]">${st.name}</span>
-            </div>
-          `,
-          iconSize: [110, 22],
-          iconAnchor: [55, 22],
+          const pinIcon = L.divIcon({
+            className: 'zone-station-pin',
+            html: `
+              <div class="flex items-center gap-1 bg-emerald-600 text-white font-black text-[9px] px-2 py-0.5 rounded-full border border-white shadow-lg whitespace-nowrap">
+                <span>📍</span>
+                <span class="truncate max-w-[100px]">${st.name}</span>
+              </div>
+            `,
+            iconSize: [110, 22],
+            iconAnchor: [55, 22],
+          });
+          L.marker([st.latitude, st.longitude], { icon: pinIcon }).addTo(group);
         });
-        L.marker([st.latitude, st.longitude], { icon: pinIcon }).addTo(group);
-      });
+      }
 
       // Center Zone Badge Marker
       const zoneIcon = L.divIcon({

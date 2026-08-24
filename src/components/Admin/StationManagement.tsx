@@ -262,6 +262,17 @@ export const StationManagement: React.FC<StationManagementProps> = () => {
     }
   };
 
+  // Filtered stations list
+  const filteredStations = stations.filter((st) => {
+    const matchesSearch =
+      st.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      st.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (st.description && st.description.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesCat = categoryFilter === 'all' || st.category === categoryFilter;
+    const matchesZone = zoneFilter === 'all' || st.zoneId === zoneFilter;
+    return matchesSearch && matchesCat && matchesZone;
+  });
+
   // 4. Render Station Pins & Radius Circles
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -274,7 +285,7 @@ export const StationManagement: React.FC<StationManagementProps> = () => {
 
     const boundsPoints: [number, number][] = [];
 
-    stations.forEach((st) => {
+    filteredStations.forEach((st) => {
       if (!st.latitude || !st.longitude) return;
 
       const isCurrentSelected = selectedStation?.id === st.id;
@@ -365,7 +376,7 @@ export const StationManagement: React.FC<StationManagementProps> = () => {
     if (boundsPoints.length > 0 && !selectedStation) {
       map.fitBounds(boundsPoints, { padding: [40, 40], maxZoom: 15 });
     }
-  }, [stations, selectedStation]);
+  }, [filteredStations, selectedStation]);
 
   // Center on Selected Station
   const handleFocusStation = (st: ShuttleStation) => {
@@ -541,17 +552,6 @@ export const StationManagement: React.FC<StationManagementProps> = () => {
       setTimeout(() => setNotification(null), 3000);
     }
   };
-
-  // Filtered stations list
-  const filteredStations = stations.filter((st) => {
-    const matchesSearch =
-      st.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      st.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (st.description && st.description.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesCat = categoryFilter === 'all' || st.category === categoryFilter;
-    const matchesZone = zoneFilter === 'all' || st.zoneId === zoneFilter;
-    return matchesSearch && matchesCat && matchesZone;
-  });
 
   return (
     <div className="space-y-5 animate-in fade-in duration-200 pb-28 sm:pb-36">
