@@ -68,6 +68,7 @@ export const HomeMapBooking: React.FC = () => {
   const [isBookingLoading, setIsBookingLoading] = useState<boolean>(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [isLocatingGps, setIsLocatingGps] = useState<boolean>(false);
+  const [hasGpsAcquired, setHasGpsAcquired] = useState<boolean>(false);
   const hasGpsAcquiredRef = React.useRef<boolean>(false);
 
   // Auto-acquire device GPS immediately upon opening the app
@@ -79,6 +80,7 @@ export const HomeMapBooking: React.FC = () => {
     const handleGpsSuccess = (position: GeolocationPosition) => {
       const { latitude, longitude } = position.coords;
       hasGpsAcquiredRef.current = true;
+      setHasGpsAcquired(true);
       setIsLocatingGps(false);
 
       setPickup((prev) => {
@@ -274,6 +276,8 @@ export const HomeMapBooking: React.FC = () => {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
+        hasGpsAcquiredRef.current = true;
+        setHasGpsAcquired(true);
         // Verify proximity to nearest station
         const check = checkLocationWithinStationArea(latitude, longitude, stations);
 
@@ -775,8 +779,8 @@ export const HomeMapBooking: React.FC = () => {
               </div>
             )}
 
-            {/* IN-ZONE SUCCESS BADGE */}
-            {proximityCheck.isWithinRadius && proximityCheck.nearestStation && (!destination || destinationProximityCheck?.isWithinRadius) && (
+            {/* IN-ZONE SUCCESS BADGE - ONLY DISPLAY WHEN LEGITIMATE USER GPS HAS BEEN ACQUIRED */}
+            {hasGpsAcquired && proximityCheck.isWithinRadius && proximityCheck.nearestStation && (!destination || destinationProximityCheck?.isWithinRadius) && (
               <div className="bg-emerald-50 border border-emerald-300 px-3 py-1.5 rounded-xl flex items-center justify-between text-[10px] text-emerald-800 font-bold">
                 <div className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />

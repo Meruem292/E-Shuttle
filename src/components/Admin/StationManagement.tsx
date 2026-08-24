@@ -571,32 +571,6 @@ export const StationManagement: React.FC<StationManagementProps> = () => {
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
-            onClick={() => handleStartPinning('dropoff_only')}
-            className={`px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm ${
-              isPinningMode && pinningTargetType === 'dropoff_only'
-                ? 'bg-purple-600 hover:bg-purple-700 text-white ring-2 ring-purple-300 animate-pulse'
-                : 'bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-300'
-            }`}
-            title="Click anywhere on the map to pin a new dedicated Drop-off station"
-          >
-            <MapPin className="w-4 h-4 text-purple-600" />
-            <span>{isPinningMode && pinningTargetType === 'dropoff_only' ? 'Pinning Drop-off...' : '🏁 Pin Drop-off'}</span>
-          </button>
-
-          <button
-            onClick={() => handleStartPinning('both')}
-            className={`px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm ${
-              isPinningMode && pinningTargetType === 'both'
-                ? 'bg-amber-500 hover:bg-amber-600 text-white animate-pulse'
-                : 'bg-[#E3F2FD] hover:bg-[#BBDEFB] text-[#0D47A1] border border-[#0D47A1]'
-            }`}
-            title="Click anywhere on the map to drop a new station pin"
-          >
-            <Compass className="w-4 h-4" />
-            <span>{isPinningMode && pinningTargetType === 'both' ? 'Pinning Active' : 'Drop Pin on Map'}</span>
-          </button>
-
-          <button
             onClick={() => handleOpenAdd('both')}
             className="px-4 py-2 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md active:scale-95 transition-transform"
           >

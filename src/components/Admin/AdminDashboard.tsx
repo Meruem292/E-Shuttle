@@ -23,6 +23,13 @@ import { useBackHandler } from '../../contexts/NativeBackContext';
 import officialLogo from '../../images/official_logo.jpg';
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
 import { ChatFloatingButton } from '../Common/ChatFloatingButton';
+import { ChatDrawer } from '../Common/ChatDrawer';
+import {
+  IncidentTicket,
+  subscribeToTickets,
+  updateTicketStatus,
+  INCIDENT_CATEGORIES,
+} from '../../services/ticketService';
 import {
   LogOut,
   CheckCircle,
@@ -43,6 +50,9 @@ import {
   Layers,
   LayoutDashboard,
   Landmark,
+  ShieldAlert,
+  AlertTriangle,
+  MessageSquare,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -102,6 +112,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedCustomer, setSelectedCustomer] = useState<UserProfile | null>(null);
   const [selectedDriverModal, setSelectedDriverModal] = useState<DriverProfile | null>(null);
   const [selectedBookingModal, setSelectedBookingModal] = useState<Booking | null>(null);
+
+  // Incident Tickets State
+  const [incidentTickets, setIncidentTickets] = useState<IncidentTicket[]>([]);
+  const [ticketStatusFilter, setTicketStatusFilter] = useState<string>('ALL');
+  const [selectedTicketChannelId, setSelectedTicketChannelId] = useState<string | null>(null);
 
   // Native Back Button Handlers for Admin Modals
   useBackHandler(
@@ -239,11 +254,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setZones(zList);
     });
 
+    // 6. Subscribe to Incident Tickets
+    const unsubTickets = subscribeToTickets('admin', 'admin', (tList) => {
+      setIncidentTickets(tList);
+    });
+
     return () => {
       unsubCustomers();
       unsubDrivers();
       unsubBookings();
       unsubZones();
+      unsubTickets();
     };
   }, [currentUser]);
 
@@ -453,12 +474,76 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   });
 
   // Strict tab resolution fallback to ensure contents never render blank on page refresh
-  const validAdminTabs = ['dashboard', 'zones', 'stations', 'users', 'customers', 'drivers', 'rides', 'ebikes', 'settings'];
+  const validAdminTabs = ['dashboard', 'zones', 'stations', 'users', 'customers', 'drivers', 'rides', 'ebikes', 'incidents', 'settings'];
   const currentTab = activeTab === 'map' ? 'dashboard' : validAdminTabs.includes(activeTab) ? activeTab : 'dashboard';
+
+  // Dynamic header information based on active page view
+  const getPageHeaderInfo = () => {
+    switch (currentTab) {
+      case 'dashboard':
+      case 'map':
+        return {
+          title: 'Admin Control Panel',
+          badge: 'OVERVIEW',
+          subtitle: 'Real-time fleet status, revenue KPIs, and active shuttle dispatch',
+        };
+      case 'users':
+      case 'customers':
+      case 'drivers':
+        return {
+          title: `Users & Driver Accounts (${customersOnly.length + drivers.length})`,
+          badge: 'DIRECTORY',
+          subtitle: 'Unified account directory for passengers, shuttle drivers, approvals, and RFID access',
+        };
+      case 'zones':
+        return {
+          title: `Geofence Service Zones (${zones.length})`,
+          badge: 'COVERAGE',
+          subtitle: 'Configure operational boundaries, active perimeters, and service coverage zones',
+        };
+      case 'stations':
+        return {
+          title: 'Shuttle Stations & Stop Pinning',
+          badge: 'STATIONS',
+          subtitle: 'Manage designated pick-up & drop-off station locations and catchments',
+        };
+      case 'rides':
+        return {
+          title: `Trip Dispatch History (${allBookings.length})`,
+          badge: 'TRANSIT LOG',
+          subtitle: 'Complete record of ongoing, completed, and cancelled transit trips',
+        };
+      case 'ebikes':
+        return {
+          title: 'E-Shuttle Fleet & Telemetry',
+          badge: 'FLEET',
+          subtitle: 'Monitor vehicle status, battery levels, maintenance, and GPS tracking',
+        };
+      case 'incidents':
+        return {
+          title: `Incidents & Support Tickets (${incidentTickets.length})`,
+          badge: 'SAFETY & DISPATCH',
+          subtitle: 'Passenger & driver safety reports, breakdowns, and 2-way dispatch support',
+        };
+      case 'settings':
+        return {
+          title: 'Dispatch System Settings',
+          badge: 'CONFIG',
+          subtitle: 'Configure pricing, system defaults, fare rules, and operational parameters',
+        };
+      default:
+        return {
+          title: 'Admin Control Panel',
+          badge: 'ADMIN',
+          subtitle: 'Manage users, drivers, e-shuttles & pick-up dispatch',
+        };
+    }
+  };
+  const pageHeader = getPageHeaderInfo();
 
   return (
     <div className="h-full overflow-y-auto bg-[#E3F2FD] text-[#0D47A1] p-3 sm:p-5 pb-36 max-w-5xl mx-auto space-y-5">
-      {/* Admin Header */}
+      {/* Dynamic Page Title Header Bar */}
       <div className="flex items-center justify-between pt-1">
         <div className="flex items-center gap-3">
           <img
@@ -471,18 +556,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           />
           <div>
             <h1 className="text-lg sm:text-2xl font-black text-[#0D47A1] flex items-center gap-2">
-              <span>Admin Control Panel</span>
+              <span>{pageHeader.title}</span>
               <span className="text-[10px] font-black bg-[#0D47A1] text-white border border-[#0D47A1] px-2 py-0.5 rounded-full uppercase hidden sm:inline-block shadow-sm">
-                ADMIN
+                {pageHeader.badge}
               </span>
             </h1>
-            <p className="text-xs text-slate-500 font-medium">Manage users, drivers, e-shuttles & pick-up dispatch</p>
+            <p className="text-xs text-slate-500 font-medium">{pageHeader.subtitle}</p>
           </div>
         </div>
 
         <button
           onClick={logout}
-          className="px-3 py-1.5 bg-white border-2 border-[#0D47A1] rounded-xl text-[#0D47A1] hover:bg-[#E3F2FD] transition-colors font-bold text-xs uppercase flex items-center gap-1.5 active:scale-95 shadow-sm"
+          className="px-3 py-1.5 bg-white border-2 border-[#0D47A1] rounded-xl text-[#0D47A1] hover:bg-[#E3F2FD] transition-colors font-bold text-xs uppercase flex items-center gap-1.5 active:scale-95 shadow-sm shrink-0"
           title="Sign out of administrator session"
         >
           <LogOut className="w-3.5 h-3.5 text-[#0D47A1]" />
@@ -498,7 +583,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {currentTab === 'dashboard' && (
         <div className="space-y-5 animate-in fade-in duration-200">
           {/* KPI Stat Cards Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <div
               onClick={() => {
                 setUserTabRole('ALL');
@@ -538,6 +623,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <span>{drivers.length}</span>
               </div>
               <p className="text-[10px] text-[#0D47A1] font-bold">{onlineDrivers.length} Online Now</p>
+            </div>
+
+            <div
+              onClick={() => setActiveTab('incidents')}
+              title="View reported incident tickets and safety reports"
+              className="bg-white border-2 border-rose-500 hover:bg-rose-50/50 rounded-2xl p-4 space-y-1 cursor-pointer transition-all shadow-md"
+            >
+              <div className="flex items-center justify-between text-rose-700">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-rose-800">Incident Tickets</span>
+                <ShieldAlert className="w-4 h-4 text-rose-600" />
+              </div>
+              <div className="text-2xl font-black text-rose-700 flex items-baseline gap-2">
+                <span>{incidentTickets.length}</span>
+                {incidentTickets.filter((t) => t.status === 'open').length > 0 && (
+                  <span className="text-[10px] font-black bg-rose-600 text-white px-2 py-0.5 rounded-full shadow-sm animate-pulse">
+                    {incidentTickets.filter((t) => t.status === 'open').length} Open
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-rose-700 font-bold">
+                {incidentTickets.filter((t) => t.priority === 'emergency').length} Urgent Emergencies
+              </p>
             </div>
 
             <div
@@ -800,17 +907,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
          ========================================================================= */}
       {(currentTab === 'users' || currentTab === 'customers' || currentTab === 'drivers') && (
         <div className="space-y-4 animate-in fade-in duration-200">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-black text-[#0D47A1] flex items-center gap-2">
-                <Users className="w-5 h-5 text-[#0D47A1]" />
-                <span>Users & Driver Accounts ({customersOnly.length + drivers.length})</span>
-              </h2>
-              <p className="text-xs text-slate-500 font-medium">
-                Unified account directory for passengers, shuttle drivers, approvals, and RFID access
-              </p>
-            </div>
-
+          <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-3">
             {/* Unified Search Input */}
             <div className="relative w-full sm:w-72">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
@@ -1177,15 +1274,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
          ========================================================================= */}
       {currentTab === 'rides' && (
         <div className="space-y-4 animate-in fade-in duration-200">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-black text-[#0D47A1] flex items-center gap-2">
-                <Route className="w-5 h-5 text-[#0D47A1]" />
-                <span>Pick-up & Drop-off Log ({allBookings.length})</span>
-              </h2>
-              <p className="text-xs text-slate-500 font-medium">Complete record of ongoing, completed, and cancelled transit trips</p>
-            </div>
-
+          <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-3">
             {/* Search Bar */}
             <div className="relative w-full sm:w-64">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
@@ -1733,8 +1822,151 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* Global 2-Way Admin Support & Dispatch Floating Chat Button */}
-      <ChatFloatingButton />
+      {/* =========================================================================
+          VIEW 5.5: INCIDENTS & SUPPORT TICKETS MANAGEMENT
+         ========================================================================= */}
+      {currentTab === 'incidents' && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          {/* Ticket Filter Chips */}
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+            {[
+              { id: 'ALL', label: `All (${incidentTickets.length})` },
+              { id: 'open', label: `Open (${incidentTickets.filter((t) => t.status === 'open').length})` },
+              { id: 'in_progress', label: `In Progress (${incidentTickets.filter((t) => t.status === 'in_progress').length})` },
+              { id: 'resolved', label: `Resolved (${incidentTickets.filter((t) => t.status === 'resolved' || t.status === 'closed').length})` },
+            ].map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setTicketStatusFilter(f.id)}
+                className={`px-3 py-1.5 rounded-xl font-extrabold text-xs transition-colors shrink-0 ${
+                  ticketStatusFilter === f.id
+                    ? 'bg-[#0D47A1] text-white shadow-md'
+                    : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Tickets List */}
+          <div className="space-y-3">
+            {incidentTickets.filter((t) => {
+              if (ticketStatusFilter === 'ALL') return true;
+              if (ticketStatusFilter === 'resolved') return t.status === 'resolved' || t.status === 'closed';
+              return t.status === ticketStatusFilter;
+            }).length === 0 ? (
+              <div className="bg-white border-2 border-slate-200 rounded-3xl p-10 text-center text-slate-400 space-y-2">
+                <ShieldAlert className="w-10 h-10 mx-auto text-slate-300" />
+                <p className="text-sm font-bold text-slate-600">No incident tickets matching filter</p>
+              </div>
+            ) : (
+              incidentTickets
+                .filter((t) => {
+                  if (ticketStatusFilter === 'ALL') return true;
+                  if (ticketStatusFilter === 'resolved') return t.status === 'resolved' || t.status === 'closed';
+                  return t.status === ticketStatusFilter;
+                })
+                .map((ticket) => {
+                  const catInfo = INCIDENT_CATEGORIES[ticket.category] || INCIDENT_CATEGORIES.other;
+
+                  return (
+                    <div
+                      key={ticket.id}
+                      className="bg-white border-2 border-[#0D47A1] rounded-3xl p-4 shadow-md space-y-3"
+                    >
+                      {/* Ticket Header Row */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black bg-[#0D47A1] text-white px-2.5 py-1 rounded-xl">
+                            #{ticket.ticketNumber}
+                          </span>
+                          <span className={`text-[10px] font-black px-2.5 py-1 rounded-xl uppercase ${catInfo.color}`}>
+                            {catInfo.icon} {catInfo.label}
+                          </span>
+                          <span
+                            className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${
+                              ticket.priority === 'emergency'
+                                ? 'bg-rose-600 text-white font-black animate-pulse'
+                                : ticket.priority === 'high'
+                                ? 'bg-orange-100 text-orange-800'
+                                : 'bg-slate-100 text-slate-700'
+                            }`}
+                          >
+                            {ticket.priority} Priority
+                          </span>
+                        </div>
+
+                        {/* Ticket Status Controls */}
+                        <div className="flex items-center gap-1.5">
+                          <select
+                            value={ticket.status}
+                            onChange={(e) => updateTicketStatus(ticket.id, e.target.value as any)}
+                            className="bg-slate-50 border-2 border-[#0D47A1] text-[#0D47A1] font-black text-xs rounded-xl px-2.5 py-1 focus:outline-none"
+                          >
+                            <option value="open">OPEN</option>
+                            <option value="in_progress">IN PROGRESS</option>
+                            <option value="resolved">RESOLVED</option>
+                            <option value="closed">CLOSED</option>
+                          </select>
+
+                          <button
+                            onClick={() => setSelectedTicketChannelId(ticket.channelId)}
+                            className="px-3 py-1 bg-[#0D47A1] hover:bg-[#1565C0] text-white font-black text-xs rounded-xl shadow flex items-center gap-1"
+                            title="Open 2-Way Chat Channel"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            <span>2-Way Chat</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Ticket Summary Body */}
+                      <div className="space-y-1.5 text-xs">
+                        <h3 className="font-black text-sm text-[#0D47A1]">{ticket.subject}</h3>
+                        <p className="text-slate-700 font-semibold bg-[#F8FAFC] p-3 rounded-2xl border border-slate-200 leading-relaxed whitespace-pre-line">
+                          {ticket.description}
+                        </p>
+                      </div>
+
+                      {/* Reporter & Metadata Details */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] font-bold text-slate-500">
+                        <div className="flex items-center gap-3">
+                          <span>
+                            Reporter: <strong className="text-[#0D47A1]">{ticket.reporterName}</strong> ({ticket.reporterRole})
+                          </span>
+                          {ticket.locationAddress && (
+                            <span>
+                              Location: <strong className="text-slate-700">{ticket.locationAddress}</strong>
+                            </span>
+                          )}
+                          {ticket.vehicleInfo && (
+                            <span>
+                              Shuttle #: <strong className="text-slate-700">{ticket.vehicleInfo}</strong>
+                            </span>
+                          )}
+                        </div>
+
+                        <span className="text-slate-400">
+                          Filed: {new Date(ticket.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Direct Ticket 2-Way Chat Drawer */}
+      {selectedTicketChannelId && (
+        <ChatDrawer
+          isOpen={!!selectedTicketChannelId}
+          onClose={() => setSelectedTicketChannelId(null)}
+          initialChannelId={selectedTicketChannelId}
+        />
+      )}
     </div>
   );
 };

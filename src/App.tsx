@@ -11,15 +11,21 @@ import { DriverRides } from './components/Driver/DriverRides';
 import { DriverProfile } from './components/Driver/DriverProfile';
 import { AdminDashboard } from './components/Admin/AdminDashboard';
 import { PWAInstallButton } from './components/PWAInstallPrompt';
+import { ChatFloatingButton } from './components/Common/ChatFloatingButton';
 import officialLogo from './images/official_logo.jpg';
 
 const MainAppContent: React.FC = () => {
   const { role, currentUser, loading } = useAuth();
   const [activeTab, setActiveTab] = useState<string>('home');
+  const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
   const tabHistoryRef = useRef<string[]>(['home']);
 
   // Track tab history for back button navigation
   const handleTabChange = (newTab: string) => {
+    if (newTab === 'support') {
+      setIsChatOpen(true);
+      return;
+    }
     if (newTab !== activeTab) {
       tabHistoryRef.current.push(newTab);
       setActiveTab(newTab);
@@ -31,7 +37,6 @@ const MainAppContent: React.FC = () => {
   useBackHandler(
     !isRootTab,
     () => {
-      // Pop from tab history stack if available
       if (tabHistoryRef.current.length > 1) {
         tabHistoryRef.current.pop();
         const prevTab = tabHistoryRef.current[tabHistoryRef.current.length - 1];
@@ -48,13 +53,13 @@ const MainAppContent: React.FC = () => {
   // Ensure default active tab matches role upon page refresh or role change
   useEffect(() => {
     if (role === 'admin') {
-      const validAdminTabs = ['dashboard', 'zones', 'stations', 'users', 'customers', 'drivers', 'rides', 'ebikes', 'settings'];
+      const validAdminTabs = ['dashboard', 'zones', 'stations', 'users', 'customers', 'drivers', 'rides', 'ebikes', 'incidents', 'settings'];
       if (!validAdminTabs.includes(activeTab)) {
         setActiveTab('dashboard');
         tabHistoryRef.current = ['dashboard'];
       }
     } else if (role === 'customer' || role === 'driver') {
-      const validUserTabs = ['home', 'history', 'profile'];
+      const validUserTabs = ['home', 'history', 'profile', 'support'];
       if (!validUserTabs.includes(activeTab)) {
         setActiveTab('home');
         tabHistoryRef.current = ['home'];
@@ -98,7 +103,7 @@ const MainAppContent: React.FC = () => {
   // Fallback tab computation to guarantee no blank screen is rendered before/during state updates
   const customerTab = ['home', 'history', 'profile'].includes(activeTab) ? activeTab : 'home';
   const driverTab = ['home', 'history', 'profile'].includes(activeTab) ? activeTab : 'home';
-  const adminTab = ['dashboard', 'zones', 'stations', 'users', 'customers', 'drivers', 'rides', 'ebikes', 'settings'].includes(activeTab) ? activeTab : 'dashboard';
+  const adminTab = ['dashboard', 'zones', 'stations', 'users', 'customers', 'drivers', 'rides', 'ebikes', 'incidents', 'settings'].includes(activeTab) ? activeTab : 'dashboard';
 
   return (
     <div className="h-full w-full bg-[#E3F2FD] flex flex-col overflow-hidden select-none">
@@ -128,11 +133,18 @@ const MainAppContent: React.FC = () => {
         )}
       </div>
 
+      {/* Global Live Chat & Incident Support Floating Button */}
+      <ChatFloatingButton
+        externalIsOpen={isChatOpen}
+        onRequestClose={() => setIsChatOpen(false)}
+      />
+
       {/* Bottom Navigation */}
       <BottomNav
         activeTab={role === 'admin' ? adminTab : role === 'customer' ? customerTab : driverTab}
         setActiveTab={handleTabChange}
         role={role}
+        onOpenChat={() => setIsChatOpen(true)}
       />
     </div>
   );

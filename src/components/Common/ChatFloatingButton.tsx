@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, Headphones } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { ChatDrawer } from './ChatDrawer';
 import { subscribeToUserChannels } from '../../services/chatService';
@@ -9,6 +9,8 @@ interface ChatFloatingButtonProps {
   initialTargetUser?: { id: string; name: string; role: 'customer' | 'driver' | 'admin' };
   initialBookingId?: string;
   customButtonClass?: string;
+  externalIsOpen?: boolean;
+  onRequestClose?: () => void;
 }
 
 export const ChatFloatingButton: React.FC<ChatFloatingButtonProps> = ({
@@ -16,10 +18,14 @@ export const ChatFloatingButton: React.FC<ChatFloatingButtonProps> = ({
   initialTargetUser,
   initialBookingId,
   customButtonClass,
+  externalIsOpen,
+  onRequestClose,
 }) => {
   const { currentUser, role } = useAuth();
-  const [isOpen, setIsOpen] = useState<boolean>(false);
+  const [internalIsOpen, setInternalIsOpen] = useState<boolean>(false);
   const [unreadCount, setUnreadCount] = useState<number>(0);
+
+  const isOpen = externalIsOpen !== undefined ? externalIsOpen || internalIsOpen : internalIsOpen;
 
   const currentUserId = currentUser?.uid || (role === 'admin' ? 'admin' : '');
   const currentUserRole = role || 'customer';
@@ -40,15 +46,20 @@ export const ChatFloatingButton: React.FC<ChatFloatingButtonProps> = ({
 
   if (!currentUser && role !== 'admin') return null;
 
+  const handleClose = () => {
+    setInternalIsOpen(false);
+    if (onRequestClose) onRequestClose();
+  };
+
   return (
     <>
       <button
-        onClick={() => setIsOpen(true)}
+        onClick={() => setInternalIsOpen(true)}
         className={
           customButtonClass ||
           'fixed bottom-20 right-4 z-40 bg-[#0D47A1] hover:bg-[#1565C0] text-white p-3.5 rounded-full shadow-2xl border-2 border-white flex items-center justify-center transition-all active:scale-90 hover:scale-105 group'
         }
-        title="Open Live Chat & Admin Support"
+        title="Open Live Chat, Support & Incident Reports"
       >
         <MessageSquare className="w-5 h-5 text-white group-hover:rotate-6 transition-transform" />
 
@@ -60,10 +71,10 @@ export const ChatFloatingButton: React.FC<ChatFloatingButtonProps> = ({
         )}
       </button>
 
-      {/* Chat Drawer Component */}
+      {/* Chat & Incident Tickets Drawer */}
       <ChatDrawer
         isOpen={isOpen}
-        onClose={() => setIsOpen(false)}
+        onClose={handleClose}
         initialChannelId={initialChannelId}
         initialTargetUser={initialTargetUser}
         initialBookingId={initialBookingId}

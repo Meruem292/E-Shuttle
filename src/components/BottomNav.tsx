@@ -14,6 +14,8 @@ import {
   Settings,
   Landmark,
   Layers,
+  MessageSquare,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface BottomNavProps {
@@ -21,6 +23,7 @@ interface BottomNavProps {
   setActiveTab: (tab: string) => void;
   role: UserRole | null;
   hasActiveBooking?: boolean;
+  onOpenChat?: () => void;
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({
@@ -28,15 +31,16 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   setActiveTab,
   role,
   hasActiveBooking = false,
+  onOpenChat,
 }) => {
   if (!role) return null;
 
   if (role === 'customer') {
     return (
-      <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t-2 border-[#0D47A1] px-4 py-2 flex items-center justify-around max-w-md mx-auto shadow-[0_-4px_20px_rgba(13,71,161,0.18)]">
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t-2 border-[#0D47A1] px-3 py-2 flex items-center justify-around max-w-md mx-auto shadow-[0_-4px_20px_rgba(13,71,161,0.18)]">
         <button
           onClick={() => setActiveTab('home')}
-          className={`flex flex-col items-center gap-1 py-1.5 px-3.5 rounded-2xl transition-all ${
+          className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all ${
             activeTab === 'home'
               ? 'text-white bg-[#0D47A1] font-extrabold shadow-md border border-[#0D47A1]'
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
@@ -53,7 +57,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 
         <button
           onClick={() => setActiveTab('history')}
-          className={`flex flex-col items-center gap-1 py-1.5 px-3.5 rounded-2xl transition-all ${
+          className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all ${
             activeTab === 'history'
               ? 'text-white bg-[#0D47A1] font-extrabold shadow-md border border-[#0D47A1]'
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
@@ -64,8 +68,26 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         </button>
 
         <button
+          onClick={() => {
+            if (onOpenChat) {
+              onOpenChat();
+            } else {
+              setActiveTab('support');
+            }
+          }}
+          className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all ${
+            activeTab === 'support'
+              ? 'text-white bg-[#0D47A1] font-extrabold shadow-md border border-[#0D47A1]'
+              : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
+          }`}
+        >
+          <MessageSquare className="w-5 h-5" />
+          <span className="text-[11px]">Help & Chat</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('profile')}
-          className={`flex flex-col items-center gap-1 py-1.5 px-3.5 rounded-2xl transition-all ${
+          className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all ${
             activeTab === 'profile'
               ? 'text-white bg-[#0D47A1] font-extrabold shadow-md border border-[#0D47A1]'
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
@@ -80,10 +102,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 
   if (role === 'driver') {
     return (
-      <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t-2 border-[#0D47A1] px-4 py-2 flex items-center justify-around max-w-md mx-auto shadow-[0_-4px_20px_rgba(13,71,161,0.18)]">
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t-2 border-[#0D47A1] px-3 py-2 flex items-center justify-around max-w-md mx-auto shadow-[0_-4px_20px_rgba(13,71,161,0.18)]">
         <button
           onClick={() => setActiveTab('home')}
-          className={`flex flex-col items-center gap-1 py-1.5 px-3.5 rounded-2xl transition-all ${
+          className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all ${
             activeTab === 'home'
               ? 'text-white bg-[#0D47A1] font-extrabold shadow-md border border-[#0D47A1]'
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
@@ -95,7 +117,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 
         <button
           onClick={() => setActiveTab('history')}
-          className={`flex flex-col items-center gap-1 py-1.5 px-3.5 rounded-2xl transition-all ${
+          className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all ${
             activeTab === 'history'
               ? 'text-white bg-[#0D47A1] font-extrabold shadow-md border border-[#0D47A1]'
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
@@ -106,8 +128,26 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         </button>
 
         <button
+          onClick={() => {
+            if (onOpenChat) {
+              onOpenChat();
+            } else {
+              setActiveTab('support');
+            }
+          }}
+          className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all ${
+            activeTab === 'support'
+              ? 'text-white bg-[#0D47A1] font-extrabold shadow-md border border-[#0D47A1]'
+              : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
+          }`}
+        >
+          <MessageSquare className="w-5 h-5" />
+          <span className="text-[11px]">Dispatch Chat</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('profile')}
-          className={`flex flex-col items-center gap-1 py-1.5 px-3.5 rounded-2xl transition-all ${
+          className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all ${
             activeTab === 'profile'
               ? 'text-white bg-[#0D47A1] font-extrabold shadow-md border border-[#0D47A1]'
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
@@ -122,11 +162,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 
   if (role === 'admin') {
     return (
-      <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t-2 border-[#0D47A1] px-2 sm:px-4 py-2 flex items-center justify-between max-w-5xl mx-auto shadow-[0_-4px_20px_rgba(13,71,161,0.18)]">
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t-2 border-[#0D47A1] px-1.5 sm:px-4 py-2 flex items-center justify-between max-w-5xl mx-auto shadow-[0_-4px_20px_rgba(13,71,161,0.18)]">
         <button
           onClick={() => setActiveTab('dashboard')}
           title="Overview & Live Map"
-          className={`flex flex-col items-center gap-0.5 text-[9px] sm:text-xs py-1.5 px-2 rounded-xl transition-all ${
+          className={`flex flex-col items-center gap-0.5 text-[9px] sm:text-xs py-1.5 px-1.5 sm:px-2 rounded-xl transition-all ${
             activeTab === 'dashboard' || activeTab === 'map'
               ? 'text-white bg-[#0D47A1] font-extrabold shadow-md border border-[#0D47A1]'
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
@@ -137,9 +177,22 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveTab('incidents')}
+          title="Incidents & Support Tickets"
+          className={`flex flex-col items-center gap-0.5 text-[9px] sm:text-xs py-1.5 px-1.5 sm:px-2 rounded-xl transition-all ${
+            activeTab === 'incidents'
+              ? 'text-white bg-rose-600 font-extrabold shadow-md border border-rose-600'
+              : 'text-rose-700 hover:text-rose-900 font-bold'
+          }`}
+        >
+          <ShieldAlert className={`w-4 h-4 ${activeTab === 'incidents' ? 'text-white' : 'text-rose-600'}`} />
+          <span className="truncate">Incidents</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('zones')}
           title="Create and configure geographic service zones"
-          className={`flex flex-col items-center gap-0.5 text-[9px] sm:text-xs py-1.5 px-2 rounded-xl transition-all ${
+          className={`flex flex-col items-center gap-0.5 text-[9px] sm:text-xs py-1.5 px-1.5 sm:px-2 rounded-xl transition-all ${
             activeTab === 'zones'
               ? 'text-white bg-[#0D47A1] font-extrabold shadow-md border border-[#0D47A1]'
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
@@ -152,7 +205,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <button
           onClick={() => setActiveTab('stations')}
           title="Pin and manage designated shuttle stations & geofences"
-          className={`flex flex-col items-center gap-0.5 text-[9px] sm:text-xs py-1.5 px-2 rounded-xl transition-all ${
+          className={`flex flex-col items-center gap-0.5 text-[9px] sm:text-xs py-1.5 px-1.5 sm:px-2 rounded-xl transition-all ${
             activeTab === 'stations'
               ? 'text-white bg-[#0D47A1] font-extrabold shadow-md border border-[#0D47A1]'
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
@@ -165,7 +218,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <button
           onClick={() => setActiveTab('users')}
           title="Manage user accounts, drivers, RFID cards & approvals"
-          className={`flex flex-col items-center gap-0.5 text-[9px] sm:text-xs py-1.5 px-2 rounded-xl transition-all ${
+          className={`flex flex-col items-center gap-0.5 text-[9px] sm:text-xs py-1.5 px-1.5 sm:px-2 rounded-xl transition-all ${
             activeTab === 'users' || activeTab === 'customers' || activeTab === 'drivers'
               ? 'text-white bg-[#0D47A1] font-extrabold shadow-md border border-[#0D47A1]'
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
@@ -178,7 +231,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <button
           onClick={() => setActiveTab('rides')}
           title="Pick-up and drop-off trip management & history"
-          className={`flex flex-col items-center gap-0.5 text-[9px] sm:text-xs py-1.5 px-2 rounded-xl transition-all ${
+          className={`flex flex-col items-center gap-0.5 text-[9px] sm:text-xs py-1.5 px-1.5 sm:px-2 rounded-xl transition-all ${
             activeTab === 'rides'
               ? 'text-white bg-[#0D47A1] font-extrabold shadow-md border border-[#0D47A1]'
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
@@ -191,7 +244,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <button
           onClick={() => setActiveTab('ebikes')}
           title="E-Shuttle management & GPS telemetry"
-          className={`flex flex-col items-center gap-0.5 text-[9px] sm:text-xs py-1.5 px-2 rounded-xl transition-all ${
+          className={`flex flex-col items-center gap-0.5 text-[9px] sm:text-xs py-1.5 px-1.5 sm:px-2 rounded-xl transition-all ${
             activeTab === 'ebikes'
               ? 'text-white bg-[#0D47A1] font-extrabold shadow-md border border-[#0D47A1]'
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
@@ -204,7 +257,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <button
           onClick={() => setActiveTab('settings')}
           title="Configure service dispatch parameters"
-          className={`flex flex-col items-center gap-0.5 text-[9px] sm:text-xs py-1.5 px-2 rounded-xl transition-all ${
+          className={`flex flex-col items-center gap-0.5 text-[9px] sm:text-xs py-1.5 px-1.5 sm:px-2 rounded-xl transition-all ${
             activeTab === 'settings'
               ? 'text-white bg-[#0D47A1] font-extrabold shadow-md border border-[#0D47A1]'
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
