@@ -197,6 +197,16 @@ export async function getOrCreateChannel(
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+    } else {
+      const existingData = snap.data() as ChatChannel;
+      const existingParticipants = existingData.participants || [];
+      const missingParticipants = participants.filter((p) => !existingParticipants.includes(p));
+      if (missingParticipants.length > 0) {
+        await updateDoc(channelRef, {
+          participants: [...existingParticipants, ...missingParticipants],
+          updatedAt: serverTimestamp(),
+        });
+      }
     }
   } catch (err) {
     console.warn('Firestore channel fetch failed, saving to local cache:', err);
@@ -235,9 +245,8 @@ export async function sendChatMessage(
   const channelRef = doc(db, 'chatChannels', channelId);
   const messagesColRef = collection(db, 'chatChannels', channelId, 'messages');
 
-  let firestoreSuccess = false;
   try {
-    const msgDoc = await addDoc(messagesColRef, msgData);
+    await addDoc(messagesColRef, msgData);
 
     // Update parent channel doc with last message and unread count
     const chanSnap = await getDoc(channelRef);
@@ -245,8 +254,16 @@ export async function sendChatMessage(
       const cData = chanSnap.data() as ChatChannel;
       const updatedUnread = { ...(cData.unreadCounts || {}) };
       (cData.participants || []).forEach((p) => {
-        if (p !== senderId) {
-          updatedUnread[p] = (updatedUnread[p] || 0) + 1;
+        if (senderRole === 'admin') {
+          if (p !== senderId && p !== 'admin' && cData.participantRoles?.[p] !== 'admin') {
+            updatedUnread[p] = (updatedUnread[p] || 0) + 1;
+          } else {
+            updatedUnread[p] = 0;
+          }
+        } else {
+          if (p !== senderId) {
+            updatedUnread[p] = (updatedUnread[p] || 0) + 1;
+          }
         }
       });
 
@@ -257,12 +274,11 @@ export async function sendChatMessage(
         updatedAt: serverTimestamp(),
       });
     }
-    firestoreSuccess = true;
   } catch (err) {
     console.warn('Firestore send message failed, writing to local storage:', err);
   }
 
-  // Always update local cache so messages render immediately offline or online
+  // Always update local cache so messages render immediately
   const localMsgs = getLocalMessages(channelId);
   const localMsgObj: ChatMessage = {
     id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -328,13 +344,8 @@ export function subscribeToMessages(
           });
         });
 
-        if (msgs.length > 0) {
-          saveLocalMessages(channelId, msgs);
-          callback(msgs);
-        } else {
-          // Fallback to local
-          callback(getLocalMessages(channelId));
-        }
+        saveLocalMessages(channelId, msgs);
+        callback(msgs);
       },
       (err) => {
         if (err.code !== 'permission-denied') {
@@ -400,12 +411,8 @@ export function subscribeToUserChannels(
           return tB - tA;
         });
 
-        if (chans.length > 0) {
-          saveLocalChannels(chans);
-          callback(chans);
-        } else {
-          callback(filterLocalChannels(uid, role));
-        }
+        saveLocalChannels(chans);
+        callback(chans);
       },
       (err) => {
         if (err.code !== 'permission-denied') {

@@ -51,5 +51,23 @@ service cloud.firestore {
     match /shuttleStations/{stationId} {
       allow read, write: if true;
     }
+    // Operational Zones Collection
+    match /operationalZones/{zoneId} {
+      allow read, write: if true;
+    }
+
+    // Chat Channels & Messages Collection
+    match /chatChannels/{channelId} {
+      allow read, write: if true;
+
+      match /messages/{messageId} {
+        allow read, write: if true;
+      }
+    }
+
+    // Incident Tickets Collection
+    match /incidentTickets/{ticketId} {
+      allow read, write: if true;
+    }
   }
 }
