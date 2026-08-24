@@ -2,12 +2,13 @@ import React from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { LogOut } from 'lucide-react';
 import { PWAInstallButton } from '../PWAInstallPrompt';
-import officialLogo from '../../images/official_logo.jpg';
+import { useAppLogo } from '../../services/logoService';
 import scsLogo from '../../images/scs_logo.jpg';
 import cctLogo from '../../images/cct_logo.jpg';
 
 export const CustomerProfile: React.FC = () => {
   const { userProfile, logout } = useAuth();
+  const { logoUrl: appLogo } = useAppLogo();
 
   return (
     <div className="h-full overflow-y-auto bg-[#E3F2FD] text-[#0D47A1] p-4 pb-36 max-w-md mx-auto space-y-5">
@@ -19,7 +20,7 @@ export const CustomerProfile: React.FC = () => {
           <p className="text-xs text-slate-500 font-medium">Manage your profile and app preferences</p>
         </div>
         <img
-          src={officialLogo}
+          src={appLogo}
           onError={(e) => {
             (e.target as HTMLImageElement).src = '/official_logo.jpg';
           }}

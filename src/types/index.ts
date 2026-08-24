@@ -26,6 +26,7 @@ export interface UserProfile {
   role: UserRole;
   fullName: string;
   email: string;
+  username?: string;
   phone: string;
   photoURL?: string;
   accountStatus: AccountStatus;
@@ -130,6 +131,10 @@ export interface AdminSettings {
   pricePerKm: number;
   minimumFare: number;
   initialSearchRadiusKm: number;
+  appLogoUrl?: string;
+  supabaseUrl?: string;
+  supabaseAnonKey?: string;
+  supabaseBucketName?: string;
   updatedAt?: any;
 }
 

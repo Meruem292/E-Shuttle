@@ -8,7 +8,8 @@ import {
   serverTimestamp,
   onSnapshot,
 } from 'firebase/firestore';
-import { db } from '../../firebase/config';
+import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import { auth, db } from '../../firebase/config';
 import { useAuth } from '../../contexts/AuthContext';
 import { AdminSettings, DriverProfile, UserProfile, Booking } from '../../types';
 import { DEFAULT_FARE_SETTINGS } from '../../constants/fare';
@@ -58,7 +59,22 @@ import {
   AlertTriangle,
   MessageSquare,
   Headphones,
+  Upload,
+  Image as ImageIcon,
+  Database,
+  Key,
+  Trash2,
+  EyeOff,
+  ExternalLink,
+  FileCode,
+  CheckCircle2,
+  Globe,
+  Lock,
+  ShieldCheck,
+  UserCog,
 } from 'lucide-react';
+import { useAppLogo } from '../../services/logoService';
+import { uploadLogoToSupabase, convertFileToBase64, getSupabaseClient } from '../../services/supabaseService';
 
 interface AdminDashboardProps {
   activeTab: string;
@@ -69,7 +85,113 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   activeTab,
   setActiveTab,
 }) => {
-  const { role, logout, currentUser } = useAuth();
+  const { role, logout, currentUser, userProfile, refreshProfile } = useAuth();
+
+  // Admin Profile State
+  const [profileFullName, setProfileFullName] = useState<string>('');
+  const [profileEmail, setProfileEmail] = useState<string>('');
+  const [profileUsername, setProfileUsername] = useState<string>('');
+  const [profilePhone, setProfilePhone] = useState<string>('');
+  const [profileSaving, setProfileSaving] = useState<boolean>(false);
+  const [profileMsg, setProfileMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Sync profile state when userProfile loads or changes
+  useEffect(() => {
+    if (userProfile) {
+      setProfileFullName(userProfile.fullName || 'Platform Administrator');
+      setProfileEmail(userProfile.email || currentUser?.email || 'admin@eshuttle.com');
+      setProfileUsername(userProfile.username || 'admin');
+      setProfilePhone(userProfile.phone || '+63 917 000 0000');
+    } else if (currentUser) {
+      setProfileEmail(currentUser.email || 'admin@eshuttle.com');
+      setProfileUsername('admin');
+    }
+  }, [userProfile, currentUser]);
+
+  const handleSaveAdminProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser) return;
+    setProfileSaving(true);
+    setProfileMsg(null);
+
+    try {
+      const cleanUsername = profileUsername.trim().toLowerCase() || 'admin';
+      const cleanFullName = profileFullName.trim() || 'Platform Administrator';
+      const cleanPhone = profilePhone.trim();
+
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      const updatedData = {
+        fullName: cleanFullName,
+        username: cleanUsername,
+        phone: cleanPhone,
+        updatedAt: serverTimestamp(),
+      };
+
+      await updateDoc(userDocRef, updatedData);
+      if (refreshProfile) await refreshProfile();
+
+      setProfileMsg({
+        type: 'success',
+        text: `Admin profile updated! You can now log in using username: ${cleanUsername}`,
+      });
+    } catch (err: any) {
+      console.error('Failed to update admin profile:', err);
+      setProfileMsg({ type: 'error', text: err?.message || 'Failed to update admin profile.' });
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  // Change Password State
+  const [currentPass, setCurrentPass] = useState<string>('');
+  const [newPass, setNewPass] = useState<string>('');
+  const [confirmPass, setConfirmPass] = useState<string>('');
+  const [showCurrentPass, setShowCurrentPass] = useState<boolean>(false);
+  const [showNewPass, setShowNewPass] = useState<boolean>(false);
+  const [passChanging, setPassChanging] = useState<boolean>(false);
+  const [passMsg, setPassMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleChangeAdminPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser || !currentUser.email) return;
+
+    if (newPass.length < 6) {
+      setPassMsg({ type: 'error', text: 'New password must be at least 6 characters long.' });
+      return;
+    }
+
+    if (newPass !== confirmPass) {
+      setPassMsg({ type: 'error', text: 'New password and confirmation do not match.' });
+      return;
+    }
+
+    setPassChanging(true);
+    setPassMsg(null);
+
+    try {
+      const credential = EmailAuthProvider.credential(currentUser.email, currentPass);
+      await reauthenticateWithCredential(currentUser, credential);
+      await updatePassword(currentUser, newPass);
+
+      setPassMsg({ type: 'success', text: 'Admin password changed successfully!' });
+      setCurrentPass('');
+      setNewPass('');
+      setConfirmPass('');
+    } catch (err: any) {
+      console.error('Change password failed:', err);
+      let errorText = 'Failed to change password.';
+      if (err?.code === 'auth/wrong-password' || err?.code === 'auth/invalid-credential') {
+        errorText = 'Current password is incorrect. Please verify and try again.';
+      } else if (err?.code === 'auth/requires-recent-login') {
+        errorText = 'Session expired. Please log out and sign in again to update password.';
+      } else if (err?.message) {
+        errorText = err.message;
+      }
+      setPassMsg({ type: 'error', text: errorText });
+    } finally {
+      setPassChanging(false);
+    }
+  };
 
   if (role !== 'admin') {
     return (
@@ -103,6 +225,90 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [fareSettings, setFareSettings] = useState<AdminSettings>(DEFAULT_FARE_SETTINGS);
   const [settingsSaving, setSettingsSaving] = useState<boolean>(false);
   const [settingsSuccess, setSettingsSuccess] = useState<boolean>(false);
+
+  // Logo & Supabase Upload State
+  const { logoUrl: activeAppLogo, isCustomLogo } = useAppLogo();
+  const [logoUploading, setLogoUploading] = useState<boolean>(false);
+  const [logoSuccessMsg, setLogoSuccessMsg] = useState<string | null>(null);
+  const [logoErrorMsg, setLogoErrorMsg] = useState<string | null>(null);
+  const [showSupabaseKey, setShowSupabaseKey] = useState<boolean>(false);
+
+  // Handle Logo Image Upload (Supabase Storage with Base64 fallback)
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setLogoUploading(true);
+    setLogoSuccessMsg(null);
+    setLogoErrorMsg(null);
+
+    try {
+      const config = {
+        url: fareSettings.supabaseUrl || import.meta.env.VITE_SUPABASE_URL || 'https://gjfwrphhhgodjhtgwmum.supabase.co',
+        anonKey: fareSettings.supabaseAnonKey || import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+        bucketName: fareSettings.supabaseBucketName || 'photos',
+      };
+
+      let finalLogoUrl = '';
+
+      if (config.url && config.anonKey) {
+        const res = await uploadLogoToSupabase(file, config);
+        if (res.success && res.url) {
+          finalLogoUrl = res.url;
+          setLogoSuccessMsg('Logo uploaded successfully to Supabase Storage!');
+        } else {
+          console.warn('Supabase upload warning, falling back to Base64:', res.error);
+          const base64Url = await convertFileToBase64(file);
+          finalLogoUrl = base64Url;
+          setLogoSuccessMsg(`Logo uploaded! (${res.error || 'Saved directly'})`);
+        }
+      } else {
+        const base64Url = await convertFileToBase64(file);
+        finalLogoUrl = base64Url;
+        setLogoSuccessMsg('Logo uploaded and saved to settings! (Configure Supabase credentials below for Cloud Storage hosting)');
+      }
+
+      const updatedSettings = {
+        ...fareSettings,
+        appLogoUrl: finalLogoUrl,
+        updatedAt: serverTimestamp(),
+      };
+
+      setFareSettings(updatedSettings);
+
+      // Instantly persist to Firestore
+      await setDoc(doc(db, 'adminSettings', 'default'), updatedSettings);
+    } catch (err: any) {
+      console.error('Error uploading logo:', err);
+      setLogoErrorMsg(err?.message || 'Failed to process image file.');
+    } finally {
+      setLogoUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  // Reset Logo back to Default
+  const handleResetLogo = async () => {
+    if (!window.confirm('Reset app logo back to default official logo?')) return;
+    setLogoUploading(true);
+    setLogoErrorMsg(null);
+    try {
+      const updatedSettings = {
+        ...fareSettings,
+        appLogoUrl: '',
+        updatedAt: serverTimestamp(),
+      };
+      setFareSettings(updatedSettings);
+      await setDoc(doc(db, 'adminSettings', 'default'), updatedSettings);
+      setLogoSuccessMsg('Logo reset to default official logo.');
+      setTimeout(() => setLogoSuccessMsg(null), 3000);
+    } catch (err: any) {
+      console.error('Failed to reset logo:', err);
+      setLogoErrorMsg('Failed to reset logo.');
+    } finally {
+      setLogoUploading(false);
+    }
+  };
 
   // RFID Pairing Modal State
   const [rfidModalDriver, setRfidModalDriver] = useState<DriverProfile | null>(null);
@@ -559,7 +765,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       <div className="flex items-center justify-between pt-1">
         <div className="flex items-center gap-3">
           <img
-            src={officialLogo}
+            src={activeAppLogo}
             onError={(e) => {
               (e.target as HTMLImageElement).src = '/official_logo.jpg';
             }}
@@ -1423,13 +1629,309 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           VIEW 6: SHUTTLE SYSTEM SETTINGS CONFIGURATION
          ========================================================================= */}
       {currentTab === 'settings' && (
-        <div className="space-y-4 max-w-lg">
+        <div className="space-y-5 max-w-xl pb-10">
           <h2 className="text-base font-black text-[#0D47A1] flex items-center gap-2">
             <Settings className="w-5 h-5 text-[#0D47A1]" />
-            <span>Shuttle Service Settings</span>
+            <span>App Branding & System Settings</span>
           </h2>
 
+          {/* CARD 1: APP BRANDING & LOGO MANAGEMENT */}
           <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-5 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <ImageIcon className="w-5 h-5 text-[#0D47A1]" />
+                <h3 className="font-black text-sm text-[#0D47A1]">Application Logo & Branding</h3>
+              </div>
+              <span
+                className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full ${
+                  isCustomLogo
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    : 'bg-slate-100 text-slate-600 border border-slate-200'
+                }`}
+              >
+                {isCustomLogo ? 'Custom Logo Active' : 'Default Official Logo'}
+              </span>
+            </div>
+
+            {/* Current Logo Preview */}
+            <div className="flex items-center gap-4 bg-[#F8FAFC] p-3.5 rounded-2xl border-2 border-slate-200">
+              <div className="relative w-20 h-20 bg-white rounded-2xl overflow-hidden border-2 border-[#0D47A1] shadow-md shrink-0 flex items-center justify-center p-1">
+                <img
+                  src={activeAppLogo}
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = '/official_logo.jpg';
+                  }}
+                  alt="E-Shuttle Active Logo"
+                  className="w-full h-full object-contain rounded-xl"
+                />
+              </div>
+
+              <div className="space-y-1.5 flex-1 min-w-0">
+                <h4 className="font-black text-xs text-[#0D47A1]">Current App Header Logo</h4>
+                <p className="text-[10px] text-slate-500 leading-tight">
+                  This logo is displayed across customer, driver, and admin portals, sign-in modals, and app headers.
+                </p>
+                {isCustomLogo && (
+                  <p className="text-[9px] font-mono text-slate-400 truncate" title={fareSettings.appLogoUrl}>
+                    URL: {fareSettings.appLogoUrl}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Upload Buttons */}
+            <div className="space-y-2 pt-1">
+              <label className="block text-xs font-bold text-[#0D47A1]">Upload New Logo Image</label>
+              
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="relative flex-1 min-w-[180px] py-3 px-4 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-2xl font-black text-xs shadow-md cursor-pointer active:scale-95 transition-all uppercase tracking-wider flex items-center justify-center gap-2">
+                  <Upload className="w-4 h-4 text-[#90CAF9]" />
+                  <span>{logoUploading ? 'Uploading Image...' : 'Choose Logo File'}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={logoUploading}
+                    onChange={handleLogoUpload}
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                  />
+                </label>
+
+                {isCustomLogo && (
+                  <button
+                    onClick={handleResetLogo}
+                    disabled={logoUploading}
+                    title="Restore default logo"
+                    className="py-3 px-4 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 border border-slate-200 hover:border-rose-200 rounded-2xl font-bold text-xs active:scale-95 transition-all flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Reset Logo</span>
+                  </button>
+                )}
+              </div>
+              
+              <p className="text-[10px] text-slate-400 italic">
+                Supported formats: PNG, JPG, WEBP, SVG (Max 5MB). Automatically uploads to Supabase Storage if configured below.
+              </p>
+            </div>
+
+            {/* Status Feedback Alerts */}
+            {logoSuccessMsg && (
+              <div className="p-3 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-2xl text-xs font-bold flex items-center gap-2 animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{logoSuccessMsg}</span>
+              </div>
+            )}
+
+            {logoErrorMsg && (
+              <div className="p-3 bg-rose-50 text-rose-800 border border-rose-200 rounded-2xl text-xs font-bold flex items-center gap-2 animate-in fade-in">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{logoErrorMsg}</span>
+              </div>
+            )}
+          </div>
+
+          {/* CARD 2: ADMIN PROFILE & USERNAME MANAGEMENT */}
+          <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-5 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <UserCog className="w-5 h-5 text-[#0D47A1]" />
+                <div>
+                  <h3 className="font-black text-sm text-[#0D47A1]">Admin Profile & Credentials</h3>
+                  <p className="text-[10px] text-slate-500 font-medium">Manage Admin profile details and custom username for login</p>
+                </div>
+              </div>
+              <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-blue-100 text-[#0D47A1] border border-blue-200">
+                Username Auth Active
+              </span>
+            </div>
+
+            <form onSubmit={handleSaveAdminProfile} className="space-y-3">
+              <div className="p-3 bg-[#E3F2FD] border border-[#0D47A1]/30 rounded-2xl text-xs text-[#0D47A1] space-y-1">
+                <div className="flex items-center gap-1.5 font-black">
+                  <ShieldCheck className="w-4 h-4 text-[#0D47A1]" />
+                  <span>Custom Username Login</span>
+                </div>
+                <p className="text-[11px] text-[#0D47A1]/80">
+                  You can set a custom username (e.g., <b>admin</b>, <b>superadmin</b>) so you can log into the platform without needing a Gmail address.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-[#0D47A1]">Full Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={profileFullName}
+                    onChange={(e) => setProfileFullName(e.target.value)}
+                    className="w-full bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-bold focus:bg-white focus:outline-none focus:border-[#1565C0]"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-[#0D47A1]">Custom Username (for Login)</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="admin"
+                    value={profileUsername}
+                    onChange={(e) => setProfileUsername(e.target.value.trim().toLowerCase())}
+                    className="w-full bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-bold focus:bg-white focus:outline-none focus:border-[#1565C0]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-[#0D47A1]">Account Email</label>
+                  <input
+                    type="email"
+                    disabled
+                    value={profileEmail}
+                    className="w-full bg-slate-100 border-2 border-slate-300 text-slate-500 rounded-xl p-2.5 text-xs font-bold cursor-not-allowed"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-[#0D47A1]">Contact Phone</label>
+                  <input
+                    type="tel"
+                    value={profilePhone}
+                    onChange={(e) => setProfilePhone(e.target.value)}
+                    className="w-full bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-bold focus:bg-white focus:outline-none focus:border-[#1565C0]"
+                  />
+                </div>
+              </div>
+
+              {profileMsg && (
+                <div
+                  className={`p-3 rounded-2xl text-xs font-bold flex items-center gap-2 animate-in fade-in ${
+                    profileMsg.type === 'success'
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                      : 'bg-rose-50 text-rose-800 border border-rose-200'
+                  }`}
+                >
+                  {profileMsg.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  )}
+                  <span>{profileMsg.text}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={profileSaving}
+                className="w-full py-3 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-2xl font-black text-xs shadow-md active:scale-95 transition-transform uppercase tracking-wider flex items-center justify-center gap-2"
+              >
+                <Save className="w-4 h-4 text-[#90CAF9]" />
+                <span>{profileSaving ? 'Saving Profile...' : 'Save Admin Profile'}</span>
+              </button>
+            </form>
+          </div>
+
+          {/* CARD 3: CHANGE ADMIN PASSWORD */}
+          <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-5 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Lock className="w-5 h-5 text-[#0D47A1]" />
+                <div>
+                  <h3 className="font-black text-sm text-[#0D47A1]">Change Admin Password</h3>
+                  <p className="text-[10px] text-slate-500 font-medium">Update password credentials for security</p>
+                </div>
+              </div>
+            </div>
+
+            <form onSubmit={handleChangeAdminPassword} className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-[#0D47A1]">Current Password</label>
+                <div className="relative">
+                  <input
+                    type={showCurrentPass ? 'text' : 'password'}
+                    required
+                    placeholder="Enter current password"
+                    value={currentPass}
+                    onChange={(e) => setCurrentPass(e.target.value)}
+                    className="w-full bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-mono focus:bg-white focus:outline-none focus:border-[#1565C0] pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPass(!showCurrentPass)}
+                    className="absolute right-3 top-2.5 text-[#0D47A1] hover:text-[#1565C0]"
+                  >
+                    {showCurrentPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-[#0D47A1]">New Password</label>
+                  <div className="relative">
+                    <input
+                      type={showNewPass ? 'text' : 'password'}
+                      required
+                      placeholder="At least 6 characters"
+                      value={newPass}
+                      onChange={(e) => setNewPass(e.target.value)}
+                      className="w-full bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-mono focus:bg-white focus:outline-none focus:border-[#1565C0] pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPass(!showNewPass)}
+                      className="absolute right-3 top-2.5 text-[#0D47A1] hover:text-[#1565C0]"
+                    >
+                      {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-[#0D47A1]">Confirm New Password</label>
+                  <input
+                    type={showNewPass ? 'text' : 'password'}
+                    required
+                    placeholder="Re-enter new password"
+                    value={confirmPass}
+                    onChange={(e) => setConfirmPass(e.target.value)}
+                    className="w-full bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-mono focus:bg-white focus:outline-none focus:border-[#1565C0]"
+                  />
+                </div>
+              </div>
+
+              {passMsg && (
+                <div
+                  className={`p-3 rounded-2xl text-xs font-bold flex items-center gap-2 animate-in fade-in ${
+                    passMsg.type === 'success'
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                      : 'bg-rose-50 text-rose-800 border border-rose-200'
+                  }`}
+                >
+                  {passMsg.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  )}
+                  <span>{passMsg.text}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={passChanging}
+                className="w-full py-3 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-2xl font-black text-xs shadow-md active:scale-95 transition-transform uppercase tracking-wider flex items-center justify-center gap-2"
+              >
+                <Lock className="w-4 h-4 text-[#90CAF9]" />
+                <span>{passChanging ? 'Updating Password...' : 'Update Admin Password'}</span>
+              </button>
+            </form>
+          </div>
+
+          {/* CARD 3: SHUTTLE SYSTEM PARAMETERS */}
+          <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-5 space-y-4 shadow-xl">
+            <h3 className="font-black text-sm text-[#0D47A1]">Shuttle Operation Parameters</h3>
+
             <div className="p-3 bg-[#E3F2FD] border border-[#0D47A1] rounded-2xl text-[#0D47A1] text-xs">
               <b className="text-[#0D47A1] block font-black">Free Shuttle Service (No Payment Needed)</b>
               Users ride free of charge. No payment gateway or fare collection required.
@@ -1449,19 +1951,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             {settingsSuccess && (
-              <div className="p-2.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold text-center">
-                Shuttle settings saved successfully!
+              <div className="p-2.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold text-center animate-in fade-in">
+                Shuttle settings and Supabase configuration saved successfully!
               </div>
             )}
 
             <button
               onClick={handleSaveSettings}
               disabled={settingsSaving}
-              title="Save system parameters"
-              className="w-full py-3 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-2xl font-black text-xs shadow-lg active:scale-95 transition-transform uppercase tracking-wider flex items-center justify-center gap-2"
+              title="Save system parameters and secrets"
+              className="w-full py-3.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-2xl font-black text-xs shadow-lg active:scale-95 transition-transform uppercase tracking-wider flex items-center justify-center gap-2"
             >
               <Save className="w-4 h-4 text-[#90CAF9]" />
-              <span>{settingsSaving ? 'Saving...' : 'Save Settings'}</span>
+              <span>{settingsSaving ? 'Saving Settings...' : 'Save All Settings & Secrets'}</span>
             </button>
           </div>
         </div>

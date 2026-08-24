@@ -16,6 +16,9 @@ import {
   collection,
   serverTimestamp,
   updateDoc,
+  query,
+  where,
+  getDocs,
 } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import { UserProfile, DriverProfile, UserRole, AccountStatus, EBikeDevice } from '../types';
@@ -216,6 +219,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             role: 'admin',
             fullName: 'Platform Administrator',
             email: currentUser.email,
+            username: 'admin',
             phone: '+63 917 000 0000',
             accountStatus: 'APPROVED',
             createdAt: serverTimestamp(),
@@ -247,19 +251,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [currentUser?.uid]);
 
-  const signIn = async (email: string, pass: string) => {
-    setLoading(true);
-    await signInWithEmailAndPassword(auth, email, pass);
+  const resolveEmailFromIdentifier = async (identifier: string): Promise<string> => {
+    const clean = identifier.trim().toLowerCase();
+    if (clean.includes('@')) {
+      return clean;
+    }
+    
+    if (clean === 'admin') {
+      return 'admin@eshuttle.com';
+    }
+
+    try {
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('username', '==', clean));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const uData = snap.docs[0].data();
+        if (uData.email) return uData.email;
+      }
+
+      const driversRef = collection(db, 'drivers');
+      const qD = query(driversRef, where('username', '==', clean));
+      const snapD = await getDocs(qD);
+      if (!snapD.empty) {
+        const dData = snapD.docs[0].data();
+        if (dData.email) return dData.email;
+      }
+    } catch (err) {
+      console.warn('Username lookup error:', err);
+    }
+
+    if (clean.startsWith('admin')) {
+      return 'admin@eshuttle.com';
+    }
+
+    return identifier;
   };
 
-  const signInAdmin = async (email: string, pass: string) => {
+  const signIn = async (emailOrUsername: string, pass: string) => {
+    setLoading(true);
+    const resolvedEmail = await resolveEmailFromIdentifier(emailOrUsername);
+    await signInWithEmailAndPassword(auth, resolvedEmail, pass);
+  };
+
+  const signInAdmin = async (emailOrUsername: string, pass: string) => {
     setLoading(true);
     try {
-      const res = await signInWithEmailAndPassword(auth, email, pass);
+      const resolvedEmail = await resolveEmailFromIdentifier(emailOrUsername);
+      const res = await signInWithEmailAndPassword(auth, resolvedEmail, pass);
       const userDocRef = doc(db, 'users', res.user.uid);
       const userSnap = await getDoc(userDocRef);
 
-      const isAdminEmail = res.user.email === 'admin@eshuttle.com' || email.trim().toLowerCase() === 'admin@eshuttle.com';
+      const isAdminEmail = res.user.email === 'admin@eshuttle.com' || resolvedEmail.trim().toLowerCase() === 'admin@eshuttle.com';
       const isRoleAdmin = userSnap.exists() && userSnap.data()?.role === 'admin';
 
       if (!isAdminEmail && !isRoleAdmin) {
@@ -275,7 +318,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           uid: res.user.uid,
           role: 'admin',
           fullName: 'Platform Administrator',
-          email: res.user.email || email,
+          email: res.user.email || resolvedEmail,
+          username: 'admin',
           phone: '+63 917 000 0000',
           accountStatus: 'APPROVED',
           createdAt: serverTimestamp(),

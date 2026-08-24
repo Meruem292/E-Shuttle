@@ -4,13 +4,14 @@ import { LogOut, AlertTriangle } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { PWAInstallButton } from '../PWAInstallPrompt';
-import officialLogo from '../../images/official_logo.jpg';
+import { useAppLogo } from '../../services/logoService';
 import scsLogo from '../../images/scs_logo.jpg';
 import cctLogo from '../../images/cct_logo.jpg';
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
 
 export const DriverProfile: React.FC = () => {
   const { currentUser, driverProfile, logout } = useAuth();
+  const { logoUrl: appLogo } = useAppLogo();
 
   const handleDismissNotice = async () => {
     if (currentUser) {
@@ -30,7 +31,7 @@ export const DriverProfile: React.FC = () => {
           <p className="text-xs text-slate-500 font-medium">RFID credentials, active E-Shuttle pairing, and driver status</p>
         </div>
         <img
-          src={officialLogo}
+          src={appLogo}
           onError={(e) => {
             (e.target as HTMLImageElement).src = '/official_logo.jpg';
           }}

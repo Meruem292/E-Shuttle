@@ -2,12 +2,13 @@ import React, { useState, useRef } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBackHandler } from '../../contexts/NativeBackContext';
-import officialLogo from '../../images/official_logo.jpg';
+import { useAppLogo } from '../../services/logoService';
 import scsLogo from '../../images/scs_logo.jpg';
 import cctLogo from '../../images/cct_logo.jpg';
 
 export const AuthModal: React.FC = () => {
   const { signIn, signInAdmin, signUpCustomer, signUpDriver, resetPassword } = useAuth();
+  const { logoUrl: appLogo } = useAppLogo();
 
   const [mode, setMode] = useState<'login' | 'register' | 'forgot' | 'admin_login'>('login');
   const [roleSelection, setRoleSelection] = useState<'customer' | 'driver'>('customer');
@@ -134,7 +135,7 @@ export const AuthModal: React.FC = () => {
           <div className="text-center space-y-2">
             <div className="relative inline-block cursor-pointer" onClick={handleLogoTap}>
               <img
-                src={officialLogo}
+                src={appLogo}
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = '/official_logo.jpg';
                 }}
@@ -152,7 +153,7 @@ export const AuthModal: React.FC = () => {
           <div className="text-center space-y-2">
             <div className="relative inline-block cursor-pointer" onClick={handleLogoTap}>
               <img
-                src={officialLogo}
+                src={appLogo}
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = '/official_logo.jpg';
                 }}
@@ -301,12 +302,12 @@ export const AuthModal: React.FC = () => {
 
           <div>
             <label className="text-[11px] font-bold text-[#0D47A1]">
-              {mode === 'admin_login' ? 'Admin Email Address' : 'Email Address'}
+              {mode === 'admin_login' ? 'Admin Username or Email' : 'Email or Username'}
             </label>
             <input
-              type="email"
+              type={mode === 'register' ? 'email' : 'text'}
               required
-              placeholder={mode === 'admin_login' ? 'admin@eshuttle.com' : 'user@example.com'}
+              placeholder={mode === 'admin_login' ? 'admin or admin@eshuttle.com' : 'username or user@example.com'}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full mt-1 bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] placeholder-slate-400 focus:outline-none focus:border-[#1565C0] focus:bg-white transition-colors"

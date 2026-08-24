@@ -12,10 +12,11 @@ import { DriverProfile } from './components/Driver/DriverProfile';
 import { AdminDashboard } from './components/Admin/AdminDashboard';
 import { PWAInstallButton } from './components/PWAInstallPrompt';
 import { ChatFloatingButton } from './components/Common/ChatFloatingButton';
-import officialLogo from './images/official_logo.jpg';
+import { useAppLogo } from './services/logoService';
 
 const MainAppContent: React.FC = () => {
   const { role, currentUser, loading } = useAuth();
+  const { logoUrl } = useAppLogo();
   const [activeTab, setActiveTab] = useState<string>('home');
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
   const tabHistoryRef = useRef<string[]>(['home']);
@@ -72,7 +73,7 @@ const MainAppContent: React.FC = () => {
       <div className="h-full w-full bg-[#E3F2FD] flex flex-col items-center justify-center text-[#0D47A1] p-4 space-y-4">
         <div className="relative flex items-center justify-center">
           <img
-            src={officialLogo}
+            src={logoUrl}
             onError={(e) => {
               (e.target as HTMLImageElement).src = '/official_logo.jpg';
             }}

@@ -23,12 +23,13 @@ import {
 import { updateEBikeGpsLocation } from '../../services/ebikeService';
 import { doc, updateDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase/config';
-import officialLogo from '../../images/official_logo.jpg';
+import { useAppLogo } from '../../services/logoService';
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
 import { ChatFloatingButton } from '../Common/ChatFloatingButton';
 
 export const DriverHome: React.FC = () => {
   const { driverProfile, currentUser } = useAuth();
+  const { logoUrl: appLogo } = useAppLogo();
 
   const [availability, setAvailability] = useState<DriverAvailability>(
     driverProfile?.availability || 'OFFLINE'
@@ -239,7 +240,7 @@ export const DriverHome: React.FC = () => {
             className="flex items-center gap-2 bg-white/95 border-2 border-[#0D47A1] backdrop-blur-md px-3 py-1.5 rounded-full shadow-lg min-w-0 flex-1 cursor-pointer hover:bg-slate-50 transition-all active:scale-[0.98]"
           >
             <img
-              src={officialLogo}
+              src={appLogo}
               onError={(e) => {
                 (e.target as HTMLImageElement).src = '/official_logo.jpg';
               }}

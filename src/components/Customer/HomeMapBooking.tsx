@@ -17,6 +17,7 @@ import {
   Compass,
   Layers,
   MessageSquare,
+  ArrowRight,
 } from 'lucide-react';
 import { ChatFloatingButton } from '../Common/ChatFloatingButton';
 import {
@@ -38,13 +39,41 @@ import {
   submitRideRating,
 } from '../../services/bookingService';
 import { useBackHandler } from '../../contexts/NativeBackContext';
-import officialLogo from '../../images/official_logo.jpg';
+import { useAppLogo } from '../../services/logoService';
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
+
+const EShuttleTrikeIllustration: React.FC<{ className?: string }> = ({ className = 'w-16 h-12 text-white' }) => (
+  <svg className={className} viewBox="0 0 120 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* Roof Canopy */}
+    <path d="M15 20 C 35 12, 85 12, 105 20 L 105 28 L 15 28 Z" fill="currentColor" fillOpacity="0.2" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round" />
+    {/* Frame Pillars */}
+    <path d="M22 28 L 20 54" stroke="currentColor" strokeWidth="2.5" />
+    <path d="M55 28 L 55 54" stroke="currentColor" strokeWidth="2.5" />
+    <path d="M98 28 L 100 54" stroke="currentColor" strokeWidth="2.5" />
+    {/* Seats */}
+    <path d="M28 42 L 48 42 L 48 54" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M62 42 L 82 42 L 82 54" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+    {/* Handlebar & Front Shield */}
+    <path d="M96 36 L 102 36 L 106 50" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+    {/* Passenger Body Frame */}
+    <path d="M15 54 L 105 54 C 108 54, 110 58, 106 62 L 12 62 Z" fill="currentColor" fillOpacity="0.15" stroke="currentColor" strokeWidth="2" />
+    {/* Back & Front Wheels */}
+    <circle cx="32" cy="62" r="9" fill="white" stroke="currentColor" strokeWidth="3" />
+    <circle cx="32" cy="62" r="3" fill="currentColor" />
+    <circle cx="88" cy="62" r="9" fill="white" stroke="currentColor" strokeWidth="3" />
+    <circle cx="88" cy="62" r="3" fill="currentColor" />
+    {/* Side E-Shuttle badge */}
+    <rect x="58" y="46" width="14" height="6" rx="2" fill="white" />
+    <text x="65" y="51" fill="#0D47A1" fontSize="4" fontWeight="bold" textAnchor="middle">E</text>
+  </svg>
+);
 
 export const HomeMapBooking: React.FC = () => {
   const { userProfile, currentUser } = useAuth();
+  const { logoUrl: appLogo } = useAppLogo();
 
-  // Operational Zones & Designated Stations from Firestore
+  // Step management: 'select_zone' (Initial Page) | 'booking' (Stations & Request)
+  const [bookingStep, setBookingStep] = useState<'select_zone' | 'booking'>('select_zone');
   const [zones, setZones] = useState<OperationalZone[]>([]);
   const [selectedZoneId, setSelectedZoneId] = useState<string>('all');
   const [detectedUserZone, setDetectedUserZone] = useState<OperationalZone | null>(null);
@@ -534,8 +563,8 @@ export const HomeMapBooking: React.FC = () => {
     if (selectedZoneId && selectedZoneId !== 'all') {
       return selectedZoneId;
     }
-    return pickupStationZoneId;
-  }, [selectedZoneId, pickupStationZoneId]);
+    return detectedUserZone?.id || (zones.length > 0 ? zones[0].id : undefined);
+  }, [selectedZoneId, detectedUserZone, zones]);
 
   const activeZoneObj = useMemo(() => {
     if (effectiveZoneId) {
@@ -544,14 +573,55 @@ export const HomeMapBooking: React.FC = () => {
     return detectedUserZone;
   }, [effectiveZoneId, zones, detectedUserZone]);
 
+  // Handle explicit zone switching by customer
+  const handleSelectZone = (zoneId: string) => {
+    setSelectedZoneId(zoneId);
+    setBookingError(null);
+    setBookingStep('booking');
+
+    const targetZone = zones.find((z) => z.id === zoneId);
+    const activeSts = stations.filter((s) => s.isActive !== false);
+    const zoneStations = activeSts.filter((s) => !s.zoneId || s.zoneId === zoneId);
+
+    if (zoneStations.length > 0) {
+      let nearest = zoneStations[0];
+      let minDist = Infinity;
+      for (const st of zoneStations) {
+        const dist = calculateDistanceMeters(pickup.latitude, pickup.longitude, st.latitude, st.longitude);
+        if (dist < minDist) {
+          minDist = dist;
+          nearest = st;
+        }
+      }
+
+      setPickup({
+        latitude: nearest.latitude,
+        longitude: nearest.longitude,
+        address: `${nearest.name} (${nearest.address})`,
+      });
+
+      if (destination) {
+        const destInZone = zoneStations.some(
+          (s) => calculateDistanceMeters(destination.latitude, destination.longitude, s.latitude, s.longitude) <= (s.radiusMeters || 100)
+        );
+        if (!destInZone) {
+          setDestination(null);
+        }
+      }
+    }
+  };
+
   const filteredDestinationStations = useMemo(() => {
     let allowed = activeStations.filter(
       (s) => s.allowedType !== 'pickup_only' && s.allowDropoff !== false
     );
 
-    // Intra-Zone filter: If pickup is in a zone, only allow dropoff in that same zone
-    if (pickupStationZoneId) {
-      allowed = allowed.filter((s) => !s.zoneId || s.zoneId === pickupStationZoneId);
+    // Filter strictly by effective zone if selected or auto-detected
+    if (effectiveZoneId) {
+      const inZone = allowed.filter((s) => !s.zoneId || s.zoneId === effectiveZoneId);
+      if (inZone.length > 0) {
+        allowed = inZone;
+      }
     }
 
     if (!destinationSearch.trim()) return allowed;
@@ -560,14 +630,14 @@ export const HomeMapBooking: React.FC = () => {
         s.name.toLowerCase().includes(destinationSearch.toLowerCase()) ||
         s.address.toLowerCase().includes(destinationSearch.toLowerCase())
     );
-  }, [activeStations, destinationSearch, pickupStationZoneId]);
+  }, [activeStations, destinationSearch, effectiveZoneId]);
 
   const filteredPickupStations = useMemo(() => {
     let allowed = activeStations.filter(
       (s) => s.allowedType !== 'dropoff_only' && s.allowPickup !== false
     );
 
-    // Filter by effective zone if selected or auto-detected
+    // Filter strictly by effective zone if selected or auto-detected
     if (effectiveZoneId) {
       const inZone = allowed.filter((s) => !s.zoneId || s.zoneId === effectiveZoneId);
       if (inZone.length > 0) {
@@ -616,7 +686,7 @@ export const HomeMapBooking: React.FC = () => {
         <div className="flex items-center justify-between pointer-events-auto max-w-md mx-auto">
           <div className="flex items-center gap-2.5 bg-white/95 border-2 border-[#0D47A1] backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-lg">
             <img
-              src={officialLogo}
+              src={appLogo}
               onError={(e) => {
                 (e.target as HTMLImageElement).src = '/official_logo.jpg';
               }}
@@ -786,10 +856,119 @@ export const HomeMapBooking: React.FC = () => {
             )}
           </div>
         </div>
+      ) : bookingStep === 'select_zone' ? (
+        /* SEPARATE INITIAL STEP PAGE FOR ZONE SELECTION (Matching Image 2 Reference) */
+        <div className="absolute bottom-20 left-0 right-0 z-20 max-w-md mx-auto px-4 pb-2 animate-in fade-in duration-200">
+          <div className="bg-white/95 backdrop-blur-xl border-2 border-[#0D47A1] rounded-3xl p-5 shadow-2xl space-y-4 text-[#0D47A1]">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-[#0D47A1]/20 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Layers className="w-5 h-5 text-[#0D47A1]" />
+                  <h3 className="font-black text-base text-[#0D47A1] uppercase tracking-wide">
+                    Select Operational Zone
+                  </h3>
+                </div>
+                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                  Choose your service area to view stations & request rides
+                </p>
+              </div>
+              {detectedUserZone && (
+                <span className="text-[9px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-1 rounded-full font-extrabold flex items-center gap-1 shrink-0">
+                  <Compass className="w-3 h-3 text-emerald-600 animate-pulse" />
+                  <span>GPS: {detectedUserZone.name}</span>
+                </span>
+              )}
+            </div>
+
+            {/* Error Banner */}
+            {bookingError && (
+              <div className="bg-rose-50 border border-rose-300 text-rose-700 text-xs p-2.5 rounded-xl font-medium flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span>{bookingError}</span>
+              </div>
+            )}
+
+            {/* Zone Cards List (Matching Image 2 Reference Layout) */}
+            <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
+              {zones.length === 0 ? (
+                <div className="p-6 text-center bg-[#F8FAFC] rounded-2xl border border-dashed border-[#0D47A1]/30 text-xs text-slate-500 font-medium">
+                  Loading operational zones...
+                </div>
+              ) : (
+                zones.map((z) => {
+                  const isGpsMatch = detectedUserZone?.id === z.id;
+                  const stationCount = activeStations.filter((s) => s.zoneId === z.id).length;
+
+                  return (
+                    <div
+                      key={z.id}
+                      onClick={() => handleSelectZone(z.id)}
+                      className="group relative bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-[26px] p-4 sm:p-5 flex items-center justify-between shadow-xl hover:shadow-2xl active:scale-[0.98] transition-all cursor-pointer border-2 border-[#0D47A1] overflow-hidden"
+                    >
+                      {/* Background subtle shine */}
+                      <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-gradient-to-l from-white/10 to-transparent pointer-events-none" />
+
+                      {/* Left: Shuttle Graphic & Details */}
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="w-16 h-12 shrink-0 flex items-center justify-center">
+                          <EShuttleTrikeIllustration className="w-16 h-12 text-white" />
+                        </div>
+
+                        {/* Zone details */}
+                        <div className="min-w-0 flex-1 pr-2">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <h4 className="font-black text-base sm:text-lg text-white leading-tight truncate">
+                              {z.name}
+                            </h4>
+                            {isGpsMatch && (
+                              <span className="text-[8px] bg-emerald-400 text-emerald-950 font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+                                GPS Match
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-blue-100 font-medium text-xs flex items-center gap-1 mt-1 italic">
+                            <span>See available E-shuttle</span>
+                            <span className="text-[10px] font-mono not-italic bg-white/20 px-1.5 py-0.2 rounded font-extrabold text-white">
+                              ({stationCount} stops)
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Right: Circular Arrow Action Button */}
+                      <div className="w-10 h-10 sm:w-11 sm:h-11 bg-white rounded-full flex items-center justify-center text-[#0D47A1] shrink-0 shadow-md group-hover:translate-x-1 transition-transform">
+                        <ArrowRight className="w-5 h-5 stroke-[2.5]" />
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
       ) : (
-        /* NORMAL BOOKING SELECTION SHEET */
-        <div className="absolute bottom-20 left-0 right-0 z-20 max-w-md mx-auto px-4 pb-2">
+        /* BOOKING SELECTION SHEET (STEP 2: STATIONS & CONFIRMATION) */
+        <div className="absolute bottom-20 left-0 right-0 z-20 max-w-md mx-auto px-4 pb-2 animate-in fade-in duration-200">
           <div className="bg-white/95 backdrop-blur-xl border-2 border-[#0D47A1] rounded-3xl p-4 shadow-2xl space-y-3 text-[#0D47A1]">
+            {/* Active Zone Header Banner */}
+            <div className="flex items-center justify-between bg-[#E3F2FD] border-2 border-[#0D47A1] p-3 rounded-2xl">
+              <div className="flex items-center gap-2 overflow-hidden">
+                <Layers className="w-4 h-4 text-[#0D47A1] shrink-0" />
+                <div className="truncate">
+                  <span className="text-[9px] font-black text-[#0D47A1]/70 uppercase block leading-none">Operational Zone</span>
+                  <span className="text-sm font-black text-[#0D47A1] truncate">{activeZoneObj?.name || 'Selected Zone'}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBookingStep('select_zone')}
+                className="px-3 py-1.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white text-[10px] font-black uppercase rounded-xl border border-[#0D47A1] shrink-0 shadow-sm transition-all active:scale-95 flex items-center gap-1"
+              >
+                <span>Change Zone</span>
+              </button>
+            </div>
+
             {/* Error Banner */}
             {bookingError && (
               <div className="bg-rose-50 border border-rose-300 text-rose-700 text-xs p-2.5 rounded-xl font-medium flex items-start gap-2">
@@ -806,7 +985,7 @@ export const HomeMapBooking: React.FC = () => {
                   <div className="text-xs">
                     <span className="font-black block uppercase text-amber-800">Pick-up Outside Shuttle Service Zone</span>
                     <span className="font-medium text-amber-700">
-                      Pick-up is <b>{formattedDistanceToNearest}</b> from nearest station (<b>{proximityCheck.nearestStation?.name || 'Central Terminal'}</b>). Shuttles only operate between official pinned stations.
+                      Pick-up is <b>{formattedDistanceToNearest}</b> from nearest station in {activeZoneObj?.name || 'Zone'} (<b>{proximityCheck.nearestStation?.name || 'Central Terminal'}</b>).
                     </span>
                   </div>
                 </div>
@@ -818,7 +997,7 @@ export const HomeMapBooking: React.FC = () => {
                     className="w-full py-1.5 px-3 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-transform"
                   >
                     <Navigation className="w-3.5 h-3.5" />
-                    <span>Tag Nearest Pickup Station ({proximityCheck.nearestStation.name})</span>
+                    <span>Tag Nearest Station in {activeZoneObj?.name || 'Zone'} ({proximityCheck.nearestStation.name})</span>
                   </button>
                 )}
               </div>
@@ -832,7 +1011,7 @@ export const HomeMapBooking: React.FC = () => {
                   <div className="text-xs">
                     <span className="font-black block uppercase text-amber-800">Drop-off Outside Station Radius</span>
                     <span className="font-medium text-amber-700">
-                      Destination is <b>{formattedDistanceToNearestDest}</b> from designated stop (<b>{destinationProximityCheck.nearestStation?.name || 'Nearest Station'}</b>). Shuttles must drop off at authorized pins.
+                      Destination is <b>{formattedDistanceToNearestDest}</b> from designated stop (<b>{destinationProximityCheck.nearestStation?.name || 'Nearest Station'}</b>).
                     </span>
                   </div>
                 </div>
@@ -850,12 +1029,12 @@ export const HomeMapBooking: React.FC = () => {
               </div>
             )}
 
-            {/* IN-ZONE SUCCESS BADGE - ONLY DISPLAY WHEN LEGITIMATE USER GPS HAS BEEN ACQUIRED */}
+            {/* IN-ZONE SUCCESS BADGE */}
             {hasGpsAcquired && proximityCheck.isWithinRadius && proximityCheck.nearestStation && (!destination || destinationProximityCheck?.isWithinRadius) && (
               <div className="bg-emerald-50 border border-emerald-300 px-3 py-1.5 rounded-xl flex items-center justify-between text-[10px] text-emerald-800 font-bold">
                 <div className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span>Within {proximityCheck.nearestStation.name} Station Area</span>
+                  <span>Verified Location in {activeZoneObj?.name || 'Zone'} ({proximityCheck.nearestStation.name})</span>
                 </div>
                 <span className="text-[9px] bg-emerald-200/80 px-2 py-0.5 rounded-md font-mono">
                   {proximityCheck.distanceMeters}m away
@@ -863,13 +1042,15 @@ export const HomeMapBooking: React.FC = () => {
               </div>
             )}
 
-            {/* Pickup Location Selector */}
+            {/* STEP 2: PICKUP LOCATION SELECTOR */}
             <div className="bg-[#F8FAFC] rounded-2xl p-3 border border-[#0D47A1]/40 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2.5 overflow-hidden flex-1">
                   <span className="text-[9px] font-mono font-bold text-white bg-[#0D47A1] px-1.5 py-1 rounded uppercase shrink-0">FROM</span>
                   <div className="overflow-hidden">
-                    <div className="text-[10px] uppercase font-extrabold text-[#0D47A1] tracking-wider">Pickup Station</div>
+                    <div className="text-[10px] uppercase font-extrabold text-[#0D47A1] tracking-wider">
+                      Step 2: Pickup Station ({activeZoneObj?.name || 'Selected Zone'})
+                    </div>
                     <div className="text-xs font-bold text-[#0D47A1] truncate">{pickup.address}</div>
                   </div>
                 </div>
@@ -880,7 +1061,7 @@ export const HomeMapBooking: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowPickupModal(true)}
-                  title="Choose from official designated stations"
+                  title="Choose from official designated stations under this zone"
                   className="flex-1 py-1.5 px-2 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-[10px] font-black flex items-center justify-center gap-1 uppercase shadow-sm transition-all active:scale-95"
                 >
                   <Layers className="w-3.5 h-3.5 text-white" />
@@ -910,7 +1091,7 @@ export const HomeMapBooking: React.FC = () => {
               </div>
             </div>
 
-            {/* Destination Selector */}
+            {/* DESTINATION SELECTOR */}
             <div
               onClick={() => setShowDestinationModal(true)}
               title="Select your drop-off designated station"
@@ -919,9 +1100,11 @@ export const HomeMapBooking: React.FC = () => {
               <div className="flex items-center gap-2.5 overflow-hidden flex-1">
                 <span className="text-[9px] font-mono font-bold text-white bg-[#0D47A1] px-1.5 py-1 rounded uppercase shrink-0">TO</span>
                 <div className="overflow-hidden">
-                  <div className="text-[10px] uppercase font-extrabold text-[#0D47A1] tracking-wider">Destination Station</div>
+                  <div className="text-[10px] uppercase font-extrabold text-[#0D47A1] tracking-wider">
+                    Destination Station ({activeZoneObj?.name || 'Selected Zone'})
+                  </div>
                   <div className="text-xs font-bold text-[#0D47A1] truncate">
-                    {destination ? destination.address : 'Select Pinned Destination Station...'}
+                    {destination ? destination.address : `Select Destination Station in ${activeZoneObj?.name || 'Zone'}...`}
                   </div>
                 </div>
               </div>
@@ -1003,7 +1186,7 @@ export const HomeMapBooking: React.FC = () => {
                 {activeZoneObj && (
                   <div className="text-[10px] text-emerald-800 font-bold flex items-center gap-1 mt-0.5">
                     <Crosshair className="w-3 h-3 text-emerald-600 animate-pulse" />
-                    <span>Area: <b>{activeZoneObj.name}</b> (GPS Auto-Selected)</span>
+                    <span>Active Zone: <b>{activeZoneObj.name}</b></span>
                   </div>
                 )}
               </div>
@@ -1016,40 +1199,33 @@ export const HomeMapBooking: React.FC = () => {
               </button>
             </div>
 
-            {/* Operational Zone Filter Chips */}
+            {/* STEP 1: OPERATIONAL ZONE SELECTOR */}
             {zones.length > 0 && (
-              <div className="space-y-1">
-                <div className="flex items-center justify-between text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">
-                  <span>Filter Area Zone</span>
-                  <span className="text-[#0D47A1] font-extrabold">{filteredPickupStations.length} Suggested Stops</span>
+              <div className="space-y-1 bg-[#E3F2FD]/60 p-2.5 rounded-2xl border border-[#0D47A1]/30">
+                <div className="flex items-center justify-between text-[10px] font-black text-[#0D47A1] uppercase tracking-wider">
+                  <span className="flex items-center gap-1">
+                    <Layers className="w-3 h-3 text-[#0D47A1]" />
+                    <span>Step 1: Select Operational Zone</span>
+                  </span>
+                  <span className="text-[#0D47A1] font-extrabold">{filteredPickupStations.length} Stops Available</span>
                 </div>
                 <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
-                  <button
-                    onClick={() => setSelectedZoneId('all')}
-                    className={`px-3 py-1 rounded-xl text-[10px] font-extrabold uppercase shrink-0 transition-all border ${
-                      selectedZoneId === 'all'
-                        ? 'bg-[#0D47A1] text-white border-[#0D47A1] shadow-sm'
-                        : 'bg-[#F8FAFC] text-[#0D47A1] border-[#0D47A1]/30 hover:bg-[#E3F2FD]'
-                    }`}
-                  >
-                    All Areas ({activeStations.length})
-                  </button>
-
                   {zones.map((z) => {
                     const isDetected = detectedUserZone?.id === z.id;
-                    const isSelected = selectedZoneId === z.id || (selectedZoneId === 'all' && isDetected);
+                    const isSelected = effectiveZoneId === z.id;
                     const count = activeStations.filter((s) => s.zoneId === z.id).length;
 
                     return (
                       <button
                         key={z.id}
-                        onClick={() => setSelectedZoneId(z.id)}
-                        className={`px-3 py-1 rounded-xl text-[10px] font-extrabold uppercase shrink-0 transition-all border flex items-center gap-1.5 ${
+                        type="button"
+                        onClick={() => handleSelectZone(z.id)}
+                        className={`px-3 py-1 rounded-xl text-[10px] font-extrabold uppercase shrink-0 transition-all border flex items-center gap-1.5 active:scale-95 ${
                           isSelected
                             ? 'bg-[#0D47A1] text-white border-[#0D47A1] shadow-sm'
                             : isDetected
                             ? 'bg-emerald-50 text-emerald-800 border-emerald-400 font-black'
-                            : 'bg-[#F8FAFC] text-[#0D47A1] border-[#0D47A1]/30 hover:bg-[#E3F2FD]'
+                            : 'bg-white text-[#0D47A1] border-[#0D47A1]/30 hover:bg-[#E3F2FD]'
                         }`}
                       >
                         {isDetected && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />}
@@ -1069,7 +1245,7 @@ export const HomeMapBooking: React.FC = () => {
               <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search designated stations..."
+                placeholder={`Search stations in ${activeZoneObj?.name || 'Zone'}...`}
                 value={pickupSearch}
                 onChange={(e) => setPickupSearch(e.target.value)}
                 className="w-full pl-8 pr-3 py-2 bg-[#E3F2FD]/50 border border-[#0D47A1] rounded-xl text-xs text-[#0D47A1] font-bold placeholder-slate-400 focus:outline-none"
@@ -1077,47 +1253,57 @@ export const HomeMapBooking: React.FC = () => {
             </div>
 
             <div className="overflow-y-auto space-y-2 flex-1 pr-1">
-              {filteredPickupStations.map((st) => {
-                const distMeters = pickup.latitude && pickup.longitude ? calculateDistanceMeters(pickup.latitude, pickup.longitude, st.latitude, st.longitude) : null;
-                const formattedDist = distMeters !== null ? (distMeters >= 1000 ? `${(distMeters / 1000).toFixed(1)} km` : `${distMeters}m away`) : null;
+              <div className="text-[10px] font-extrabold uppercase text-slate-500 tracking-wider">
+                Step 2: Choose Pickup Station ({activeZoneObj?.name || 'Selected Zone'})
+              </div>
 
-                return (
-                  <button
-                    key={st.id}
-                    onClick={() => {
-                      setPickup({
-                        latitude: st.latitude,
-                        longitude: st.longitude,
-                        address: `${st.name} (${st.address})`,
-                      });
-                      setBookingError(null);
-                      setShowPickupModal(false);
-                    }}
-                    className="w-full text-left p-3 rounded-2xl bg-[#F8FAFC] hover:bg-[#E3F2FD] border border-[#0D47A1]/30 hover:border-[#0D47A1] flex items-start gap-3 transition-colors group"
-                  >
-                    <div className="w-8 h-8 rounded-xl bg-[#E3F2FD] border border-[#0D47A1] flex items-center justify-center text-[#0D47A1] shrink-0 group-hover:bg-[#0D47A1] group-hover:text-white transition-colors">
-                      <MapPin className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-1">
-                        <div className="text-sm font-bold text-[#0D47A1] truncate">{st.name}</div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          {formattedDist && (
-                            <span className="text-[9px] font-mono font-extrabold text-emerald-800 bg-emerald-100 border border-emerald-300 px-1.5 py-0.5 rounded">
-                              {formattedDist}
-                            </span>
-                          )}
-                          <span className="text-[9px] font-bold text-white bg-[#0D47A1] px-1.5 py-0.5 rounded uppercase">
-                            {st.category || 'Stop'}
-                          </span>
-                        </div>
+              {filteredPickupStations.length === 0 ? (
+                <div className="p-4 text-center bg-[#F8FAFC] rounded-2xl border border-dashed border-[#0D47A1]/30 text-xs text-slate-500 font-medium">
+                  No stations found in this zone. Try selecting another zone above.
+                </div>
+              ) : (
+                filteredPickupStations.map((st) => {
+                  const distMeters = pickup.latitude && pickup.longitude ? calculateDistanceMeters(pickup.latitude, pickup.longitude, st.latitude, st.longitude) : null;
+                  const formattedDist = distMeters !== null ? (distMeters >= 1000 ? `${(distMeters / 1000).toFixed(1)} km` : `${distMeters}m away`) : null;
+
+                  return (
+                    <button
+                      key={st.id}
+                      onClick={() => {
+                        setPickup({
+                          latitude: st.latitude,
+                          longitude: st.longitude,
+                          address: `${st.name} (${st.address})`,
+                        });
+                        setBookingError(null);
+                        setShowPickupModal(false);
+                      }}
+                      className="w-full text-left p-3 rounded-2xl bg-[#F8FAFC] hover:bg-[#E3F2FD] border border-[#0D47A1]/30 hover:border-[#0D47A1] flex items-start gap-3 transition-colors group"
+                    >
+                      <div className="w-8 h-8 rounded-xl bg-[#E3F2FD] border border-[#0D47A1] flex items-center justify-center text-[#0D47A1] shrink-0 group-hover:bg-[#0D47A1] group-hover:text-white transition-colors">
+                        <MapPin className="w-4 h-4" />
                       </div>
-                      <div className="text-xs text-slate-500 truncate">{st.address}</div>
-                      {st.description && <div className="text-[10px] text-slate-400 italic truncate mt-0.5">{st.description}</div>}
-                    </div>
-                  </button>
-                );
-              })}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-1">
+                          <div className="text-sm font-bold text-[#0D47A1] truncate">{st.name}</div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {formattedDist && (
+                              <span className="text-[9px] font-mono font-extrabold text-emerald-800 bg-emerald-100 border border-emerald-300 px-1.5 py-0.5 rounded">
+                                {formattedDist}
+                              </span>
+                            )}
+                            <span className="text-[9px] font-bold text-white bg-[#0D47A1] px-1.5 py-0.5 rounded uppercase">
+                              {st.category || 'Stop'}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-xs text-slate-500 truncate">{st.address}</div>
+                        {st.description && <div className="text-[10px] text-slate-400 italic truncate mt-0.5">{st.description}</div>}
+                      </div>
+                    </button>
+                  );
+                })
+              )}
             </div>
 
             <button
@@ -1137,12 +1323,20 @@ export const HomeMapBooking: React.FC = () => {
       {/* DESTINATION SELECTION MODAL */}
       {showDestinationModal && (
         <div className="fixed inset-0 z-50 bg-[#0D47A1]/30 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white border-2 border-[#0D47A1] rounded-3xl w-full max-w-md p-5 space-y-4 max-h-[85vh] flex flex-col shadow-2xl text-[#0D47A1]">
+          <div className="bg-white border-2 border-[#0D47A1] rounded-3xl w-full max-w-md p-5 space-y-3.5 max-h-[85vh] flex flex-col shadow-2xl text-[#0D47A1]">
             <div className="flex items-center justify-between border-b border-[#0D47A1]/20 pb-3">
-              <h3 className="text-base font-black text-[#0D47A1] flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-[#0D47A1]" />
-                <span>Select Destination Station</span>
-              </h3>
+              <div>
+                <h3 className="text-base font-black text-[#0D47A1] flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-[#0D47A1]" />
+                  <span>Select Destination Station</span>
+                </h3>
+                {activeZoneObj && (
+                  <div className="text-[10px] text-emerald-800 font-bold flex items-center gap-1 mt-0.5">
+                    <Crosshair className="w-3 h-3 text-emerald-600 animate-pulse" />
+                    <span>Active Zone: <b>{activeZoneObj.name}</b></span>
+                  </div>
+                )}
+              </div>
               <button
                 onClick={() => setShowDestinationModal(false)}
                 className="text-[#0D47A1] hover:bg-[#0D47A1] hover:text-white px-2.5 py-1 rounded-lg bg-[#E3F2FD] text-xs font-bold uppercase flex items-center gap-1 border border-[#0D47A1] transition-colors"
@@ -1152,16 +1346,53 @@ export const HomeMapBooking: React.FC = () => {
               </button>
             </div>
 
-            <p className="text-xs text-slate-500 font-medium">
-              E-Shuttles drop off strictly at official designated station pins:
-            </p>
+            {/* STEP 1: OPERATIONAL ZONE SELECTOR */}
+            {zones.length > 0 && (
+              <div className="space-y-1 bg-[#E3F2FD]/60 p-2.5 rounded-2xl border border-[#0D47A1]/30">
+                <div className="flex items-center justify-between text-[10px] font-black text-[#0D47A1] uppercase tracking-wider">
+                  <span className="flex items-center gap-1">
+                    <Layers className="w-3 h-3 text-[#0D47A1]" />
+                    <span>Step 1: Select Operational Zone</span>
+                  </span>
+                  <span className="text-[#0D47A1] font-extrabold">{filteredDestinationStations.length} Stops Available</span>
+                </div>
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                  {zones.map((z) => {
+                    const isDetected = detectedUserZone?.id === z.id;
+                    const isSelected = effectiveZoneId === z.id;
+                    const count = activeStations.filter((s) => s.zoneId === z.id).length;
+
+                    return (
+                      <button
+                        key={z.id}
+                        type="button"
+                        onClick={() => handleSelectZone(z.id)}
+                        className={`px-3 py-1 rounded-xl text-[10px] font-extrabold uppercase shrink-0 transition-all border flex items-center gap-1.5 active:scale-95 ${
+                          isSelected
+                            ? 'bg-[#0D47A1] text-white border-[#0D47A1] shadow-sm'
+                            : isDetected
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-400 font-black'
+                            : 'bg-white text-[#0D47A1] border-[#0D47A1]/30 hover:bg-[#E3F2FD]'
+                        }`}
+                      >
+                        {isDetected && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />}
+                        <span>{z.name}</span>
+                        <span className={`text-[9px] px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-white/20 text-white' : 'bg-[#E3F2FD] text-[#0D47A1]'}`}>
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Search filter */}
             <div className="relative">
               <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search destination stations..."
+                placeholder={`Search destination stations in ${activeZoneObj?.name || 'Zone'}...`}
                 value={destinationSearch}
                 onChange={(e) => setDestinationSearch(e.target.value)}
                 className="w-full pl-8 pr-3 py-2 bg-[#E3F2FD]/50 border border-[#0D47A1] rounded-xl text-xs text-[#0D47A1] font-bold placeholder-slate-400 focus:outline-none"
@@ -1169,33 +1400,43 @@ export const HomeMapBooking: React.FC = () => {
             </div>
 
             <div className="overflow-y-auto space-y-2 flex-1 pr-1">
-              {filteredDestinationStations.map((st) => (
-                <button
-                  key={st.id}
-                  onClick={() => {
-                    setDestination({
-                      latitude: st.latitude,
-                      longitude: st.longitude,
-                      address: `${st.name} (${st.address})`,
-                    });
-                    setShowDestinationModal(false);
-                  }}
-                  className="w-full text-left p-3 rounded-2xl bg-[#F8FAFC] hover:bg-[#E3F2FD] border border-[#0D47A1]/30 hover:border-[#0D47A1] flex items-start gap-3 transition-colors group"
-                >
-                  <div className="w-8 h-8 rounded-xl bg-[#E3F2FD] border border-[#0D47A1] flex items-center justify-center text-[#0D47A1] shrink-0 group-hover:bg-[#0D47A1] group-hover:text-white transition-colors">
-                    <MapPin className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-1">
-                      <div className="text-sm font-bold text-[#0D47A1] truncate">{st.name}</div>
-                      <span className="text-[9px] font-bold text-white bg-[#0D47A1] px-1.5 py-0.5 rounded uppercase">
-                        {st.category || 'Stop'}
-                      </span>
+              <div className="text-[10px] font-extrabold uppercase text-slate-500 tracking-wider">
+                Step 2: Choose Destination Station ({activeZoneObj?.name || 'Selected Zone'})
+              </div>
+
+              {filteredDestinationStations.length === 0 ? (
+                <div className="p-4 text-center bg-[#F8FAFC] rounded-2xl border border-dashed border-[#0D47A1]/30 text-xs text-slate-500 font-medium">
+                  No destination stations found in this zone. Try selecting another zone above.
+                </div>
+              ) : (
+                filteredDestinationStations.map((st) => (
+                  <button
+                    key={st.id}
+                    onClick={() => {
+                      setDestination({
+                        latitude: st.latitude,
+                        longitude: st.longitude,
+                        address: `${st.name} (${st.address})`,
+                      });
+                      setShowDestinationModal(false);
+                    }}
+                    className="w-full text-left p-3 rounded-2xl bg-[#F8FAFC] hover:bg-[#E3F2FD] border border-[#0D47A1]/30 hover:border-[#0D47A1] flex items-start gap-3 transition-colors group"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-[#E3F2FD] border border-[#0D47A1] flex items-center justify-center text-[#0D47A1] shrink-0 group-hover:bg-[#0D47A1] group-hover:text-white transition-colors">
+                      <MapPin className="w-4 h-4" />
                     </div>
-                    <div className="text-xs text-slate-500 truncate">{st.address}</div>
-                  </div>
-                </button>
-              ))}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-1">
+                        <div className="text-sm font-bold text-[#0D47A1] truncate">{st.name}</div>
+                        <span className="text-[9px] font-bold text-white bg-[#0D47A1] px-1.5 py-0.5 rounded uppercase">
+                          {st.category || 'Stop'}
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-500 truncate">{st.address}</div>
+                    </div>
+                  </button>
+                ))
+              )}
             </div>
 
             <button
