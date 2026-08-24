@@ -102,11 +102,15 @@ export const HomeMapBooking: React.FC = () => {
   const [hasGpsAcquired, setHasGpsAcquired] = useState<boolean>(false);
   const hasGpsAcquiredRef = React.useRef<boolean>(false);
 
-  // Auto-detect operational zone based on user's current GPS / pickup coordinates
+  // Auto-detect operational zone strictly based on user's REAL GPS coordinates (when acquired)
   useEffect(() => {
-    if (!pickup.latitude || !pickup.longitude || zones.length === 0) return;
+    // CRITICAL: Do NOT fake GPS zone detection if real device GPS has not been acquired!
+    if (!hasGpsAcquired || !pickup.latitude || !pickup.longitude || zones.length === 0) {
+      setDetectedUserZone(null);
+      return;
+    }
 
-    // 1. Try to find zone matching coordinates directly
+    // 1. Try to find zone matching real coordinates directly
     const nearest = findNearestZone(pickup.latitude, pickup.longitude, zones, stations);
     if (nearest.nearestZone) {
       setDetectedUserZone(nearest.nearestZone);
@@ -125,9 +129,12 @@ export const HomeMapBooking: React.FC = () => {
         if (selectedZoneId === 'all' || selectedZoneId === 'auto') {
           setSelectedZoneId(matchedZone.id);
         }
+        return;
       }
     }
-  }, [pickup.latitude, pickup.longitude, zones, stations]);
+
+    setDetectedUserZone(null);
+  }, [hasGpsAcquired, pickup.latitude, pickup.longitude, zones, stations]);
 
   // Auto-acquire device GPS immediately upon opening the app
   useEffect(() => {
@@ -165,6 +172,9 @@ export const HomeMapBooking: React.FC = () => {
     const handleGpsError = (err: GeolocationPositionError) => {
       console.warn('Auto GPS location acquisition notice:', err.message);
       setIsLocatingGps(false);
+      setHasGpsAcquired(false);
+      hasGpsAcquiredRef.current = false;
+      setDetectedUserZone(null);
     };
 
     // 1. Initial high-accuracy location lookup
@@ -873,11 +883,26 @@ export const HomeMapBooking: React.FC = () => {
                   Choose your service area to view stations & request rides
                 </p>
               </div>
-              {detectedUserZone && (
+              {isLocatingGps ? (
+                <span className="text-[9px] bg-blue-50 text-[#0D47A1] border border-blue-200 px-2.5 py-1 rounded-full font-black flex items-center gap-1 shrink-0 animate-pulse">
+                  <Compass className="w-3.5 h-3.5 text-[#0D47A1] animate-spin" />
+                  <span>Locating...</span>
+                </span>
+              ) : hasGpsAcquired && detectedUserZone ? (
                 <span className="text-[9px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-1 rounded-full font-extrabold flex items-center gap-1 shrink-0">
-                  <Compass className="w-3 h-3 text-emerald-600 animate-pulse" />
+                  <Compass className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
                   <span>GPS: {detectedUserZone.name}</span>
                 </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleUseCurrentGpsLocation}
+                  className="text-[9px] bg-[#E3F2FD] hover:bg-[#0D47A1] text-[#0D47A1] hover:text-white border border-[#0D47A1]/40 px-2.5 py-1 rounded-full font-black flex items-center gap-1 shrink-0 transition-all active:scale-95 shadow-sm"
+                  title="Trigger GPS permission to detect your operational zone"
+                >
+                  <Compass className="w-3.5 h-3.5" />
+                  <span>Detect Zone (GPS)</span>
+                </button>
               )}
             </div>
 
@@ -897,7 +922,7 @@ export const HomeMapBooking: React.FC = () => {
                 </div>
               ) : (
                 zones.map((z) => {
-                  const isGpsMatch = detectedUserZone?.id === z.id;
+                  const isGpsMatch = hasGpsAcquired && detectedUserZone?.id === z.id;
                   const stationCount = activeStations.filter((s) => s.zoneId === z.id).length;
 
                   return (
@@ -922,7 +947,7 @@ export const HomeMapBooking: React.FC = () => {
                               {z.name}
                             </h4>
                             {isGpsMatch && (
-                              <span className="text-[8px] bg-emerald-400 text-emerald-950 font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+                              <span className="text-[8px] bg-emerald-400 text-emerald-950 font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider shrink-0 animate-pulse">
                                 GPS Match
                               </span>
                             )}
