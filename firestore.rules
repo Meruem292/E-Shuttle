@@ -7,67 +7,10 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Users collection
-    match /users/{userId} {
-      allow read, write: if true;
-    }
-
-    // Drivers collection
-    match /drivers/{driverId} {
-      allow read, write: if true;
-    }
-
-    // Bookings collection
-    match /bookings/{bookingId} {
-      allow read, write: if true;
-    }
-
-    // Rides collection
-    match /rides/{rideId} {
-      allow read, write: if true;
-    }
-
-    // Ratings collection
-    match /ratings/{ratingId} {
-      allow read, write: if true;
-    }
-
-    // Admin Settings collection
-    match /adminSettings/{configId} {
-      allow read, write: if true;
-    }
-
-    // E-Bikes Hardware & Telemetry Collection
-    match /ebikes/{ebikeId} {
-      allow read, write: if true;
-    }
-
-    // System Collection (Admin RFID Registration Mode, system state, etc.)
-    match /system/{systemId} {
-      allow read, write: if true;
-    }
-
-    // Shuttle Stations & Service Pins Collection
-    match /shuttleStations/{stationId} {
-      allow read, write: if true;
-    }
-    // Operational Zones Collection
-    match /operationalZones/{zoneId} {
-      allow read, write: if true;
-    }
-
-    // Chat Channels & Messages Collection
-    match /chatChannels/{channelId} {
-      allow read, write: if true;
-
-      match /messages/{messageId} {
-        allow read, write: if true;
-      }
-    }
-
-    // Incident Tickets Collection
-    match /incidentTickets/{ticketId} {
+    // Default catch-all for development
+    match /{document=**} {
       allow read, write: if true;
     }
   }
 }
+

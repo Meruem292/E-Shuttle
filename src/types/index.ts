@@ -48,6 +48,8 @@ export interface DriverProfile {
   zoneId?: string | null; // Assigned operational zone
   zoneName?: string | null;
   rfidCardUid?: string; // Tag UID assigned to driver e.g. "A3-4F-89-12"
+  driverLicenseCardUrl?: string; // Driver's license card picture for admin validation
+  driverLicenseNumber?: string; // Optional Driver's License Number
   activeEbikeId?: string | null; // Device ID of the e-shuttle currently taken over by driver
   disconnectNotice?: string | null; // Alert message when driver is automatically logged out/disconnected by a new RFID tap
   currentLocation?: LocationPoint;

@@ -126,6 +126,62 @@ export const DriverProfile: React.FC = () => {
           )}
         </div>
 
+        {/* Driver's License Card Section */}
+        <div className="bg-[#F8FAFC] border border-[#0D47A1]/40 p-3.5 rounded-2xl space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-extrabold text-[#0D47A1] uppercase tracking-wider">
+              Driver's License Card (Admin Validation)
+            </span>
+            <span
+              className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                driverProfile?.driverLicenseCardUrl
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  : 'bg-amber-100 text-amber-800 border border-amber-300'
+              }`}
+            >
+              {driverProfile?.driverLicenseCardUrl ? '✓ Photo Uploaded' : '⚠️ Photo Pending'}
+            </span>
+          </div>
+
+          {driverProfile?.driverLicenseNumber && (
+            <div className="text-xs font-mono font-bold text-[#0D47A1]">
+              License No: {driverProfile.driverLicenseNumber}
+            </div>
+          )}
+
+          {driverProfile?.driverLicenseCardUrl ? (
+            <div className="relative w-full h-32 bg-slate-100 rounded-xl overflow-hidden border border-[#0D47A1]">
+              <img
+                src={driverProfile.driverLicenseCardUrl}
+                alt="Driver License Card"
+                className="w-full h-full object-cover"
+              />
+            </div>
+          ) : (
+            <label className="block p-3 bg-white border border-dashed border-[#0D47A1] rounded-xl text-center cursor-pointer hover:bg-[#E3F2FD] transition-colors">
+              <span className="text-xs font-bold text-[#0D47A1] block">Upload Driver's License Photo</span>
+              <span className="text-[10px] text-slate-400">Required for admin profile verification</span>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file || !currentUser) return;
+                  const reader = new FileReader();
+                  reader.onload = async (ev) => {
+                    const dataUrl = ev.target?.result as string;
+                    await updateDoc(doc(db, 'drivers', currentUser.uid), {
+                      driverLicenseCardUrl: dataUrl,
+                    });
+                  };
+                  reader.readAsDataURL(file);
+                }}
+              />
+            </label>
+          )}
+        </div>
+
         <div className="border-t border-[#0D47A1]/30 pt-3 space-y-2 text-xs text-slate-600">
           <div className="flex items-center justify-between">
             <span className="text-slate-400 uppercase font-mono text-[10px] font-bold">Email:</span>

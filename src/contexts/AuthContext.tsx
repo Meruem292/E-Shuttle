@@ -40,7 +40,9 @@ interface AuthContextType {
     phone: string,
     pass: string,
     vehicleType?: string,
-    vehicleInfo?: string
+    vehicleInfo?: string,
+    driverLicenseCardUrl?: string,
+    driverLicenseNumber?: string
   ) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -369,7 +371,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     phone: string,
     pass: string,
     vehicleType: string = 'E-Shuttle Transit',
-    vehicleInfo: string = 'Unassigned E-Shuttle'
+    vehicleInfo: string = 'Unassigned E-Shuttle',
+    driverLicenseCardUrl?: string,
+    driverLicenseNumber?: string
   ) => {
     setLoading(true);
     const res = await createUserWithEmailAndPassword(auth, email, pass);
@@ -383,6 +387,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       availability: 'OFFLINE',
       vehicleType,
       vehicleInfo,
+      driverLicenseCardUrl: driverLicenseCardUrl || undefined,
+      driverLicenseNumber: driverLicenseNumber || undefined,
       currentLocation: {
         latitude: 14.5547,
         longitude: 121.0244,

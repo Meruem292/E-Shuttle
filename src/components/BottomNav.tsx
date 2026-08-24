@@ -1,5 +1,7 @@
 import React from 'react';
 import { UserRole } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import { useActionBadges } from '../hooks/useActionBadges';
 import {
   MapPin,
   Clock,
@@ -24,7 +26,12 @@ interface BottomNavProps {
   role: UserRole | null;
   hasActiveBooking?: boolean;
   onOpenChat?: () => void;
+  customActionDots?: Record<string, boolean>;
 }
+
+const RedDot: React.FC = () => (
+  <span className="absolute -top-1 -right-1.5 w-2.5 h-2.5 bg-rose-600 rounded-full border-2 border-white animate-pulse shadow-md z-10 pointer-events-none" />
+);
 
 export const BottomNav: React.FC<BottomNavProps> = ({
   activeTab,
@@ -32,10 +39,20 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   role,
   hasActiveBooking = false,
   onOpenChat,
+  customActionDots,
 }) => {
+  const { currentUser } = useAuth();
+  const liveActionDots = useActionBadges(currentUser, role);
+  const actionDots = customActionDots || liveActionDots;
+
   if (!role) return null;
 
   if (role === 'customer') {
+    const showHomeDot = actionDots.home || hasActiveBooking;
+    const showHistoryDot = actionDots.history;
+    const showSupportDot = actionDots.support;
+    const showProfileDot = actionDots.profile;
+
     return (
       <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t-2 border-[#0D47A1] px-3 py-2 flex items-center justify-around max-w-md mx-auto shadow-[0_-4px_20px_rgba(13,71,161,0.18)]">
         <button
@@ -48,9 +65,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         >
           <div className="relative flex items-center justify-center">
             <MapPin className={`w-5 h-5 ${activeTab === 'home' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
-            {hasActiveBooking && (
-              <span className="absolute -top-1 -right-1 w-2 h-2 bg-[#0D47A1] rounded-full animate-ping" />
-            )}
+            {showHomeDot && <RedDot />}
           </div>
           <span className="text-[11px]">Home</span>
         </button>
@@ -63,7 +78,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
           }`}
         >
-          <Clock className={`w-5 h-5 ${activeTab === 'history' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+          <div className="relative flex items-center justify-center">
+            <Clock className={`w-5 h-5 ${activeTab === 'history' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+            {showHistoryDot && <RedDot />}
+          </div>
           <span className="text-[11px]">Activity</span>
         </button>
 
@@ -81,7 +99,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
           }`}
         >
-          <MessageSquare className="w-5 h-5" />
+          <div className="relative flex items-center justify-center">
+            <MessageSquare className="w-5 h-5" />
+            {showSupportDot && <RedDot />}
+          </div>
           <span className="text-[11px]">Help & Chat</span>
         </button>
 
@@ -93,7 +114,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
           }`}
         >
-          <User className={`w-5 h-5 ${activeTab === 'profile' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+          <div className="relative flex items-center justify-center">
+            <User className={`w-5 h-5 ${activeTab === 'profile' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+            {showProfileDot && <RedDot />}
+          </div>
           <span className="text-[11px]">Profile</span>
         </button>
       </div>
@@ -101,6 +125,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   }
 
   if (role === 'driver') {
+    const showDriveDot = actionDots.home;
+    const showHistoryDot = actionDots.history;
+    const showSupportDot = actionDots.support;
+    const showProfileDot = actionDots.profile;
+
     return (
       <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t-2 border-[#0D47A1] px-3 py-2 flex items-center justify-around max-w-md mx-auto shadow-[0_-4px_20px_rgba(13,71,161,0.18)]">
         <button
@@ -111,7 +140,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
           }`}
         >
-          <Navigation className={`w-5 h-5 ${activeTab === 'home' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+          <div className="relative flex items-center justify-center">
+            <Navigation className={`w-5 h-5 ${activeTab === 'home' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+            {showDriveDot && <RedDot />}
+          </div>
           <span className="text-[11px]">Drive</span>
         </button>
 
@@ -123,7 +155,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
           }`}
         >
-          <History className={`w-5 h-5 ${activeTab === 'history' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+          <div className="relative flex items-center justify-center">
+            <History className={`w-5 h-5 ${activeTab === 'history' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+            {showHistoryDot && <RedDot />}
+          </div>
           <span className="text-[11px]">History</span>
         </button>
 
@@ -141,7 +176,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
           }`}
         >
-          <MessageSquare className="w-5 h-5" />
+          <div className="relative flex items-center justify-center">
+            <MessageSquare className="w-5 h-5" />
+            {showSupportDot && <RedDot />}
+          </div>
           <span className="text-[11px]">Dispatch Chat</span>
         </button>
 
@@ -153,7 +191,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
           }`}
         >
-          <CreditCard className={`w-5 h-5 ${activeTab === 'profile' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+          <div className="relative flex items-center justify-center">
+            <CreditCard className={`w-5 h-5 ${activeTab === 'profile' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+            {showProfileDot && <RedDot />}
+          </div>
           <span className="text-[11px]">Profile & RFID</span>
         </button>
       </div>
@@ -161,6 +202,15 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   }
 
   if (role === 'admin') {
+    const showDashboardDot = actionDots.dashboard;
+    const showIncidentsDot = actionDots.incidents;
+    const showZonesDot = actionDots.zones;
+    const showStationsDot = actionDots.stations;
+    const showUsersDot = actionDots.users || actionDots.drivers || actionDots.customers;
+    const showRidesDot = actionDots.rides;
+    const showEbikesDot = actionDots.ebikes;
+    const showSettingsDot = actionDots.settings;
+
     return (
       <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t-2 border-[#0D47A1] px-1.5 sm:px-4 py-2 flex items-center justify-between max-w-5xl mx-auto shadow-[0_-4px_20px_rgba(13,71,161,0.18)]">
         <button
@@ -172,7 +222,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
           }`}
         >
-          <LayoutDashboard className={`w-4 h-4 ${activeTab === 'dashboard' || activeTab === 'map' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+          <div className="relative flex items-center justify-center">
+            <LayoutDashboard className={`w-4 h-4 ${activeTab === 'dashboard' || activeTab === 'map' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+            {showDashboardDot && <RedDot />}
+          </div>
           <span className="truncate">Dashboard</span>
         </button>
 
@@ -185,7 +238,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               : 'text-rose-700 hover:text-rose-900 font-bold'
           }`}
         >
-          <ShieldAlert className={`w-4 h-4 ${activeTab === 'incidents' ? 'text-white' : 'text-rose-600'}`} />
+          <div className="relative flex items-center justify-center">
+            <ShieldAlert className={`w-4 h-4 ${activeTab === 'incidents' ? 'text-white' : 'text-rose-600'}`} />
+            {showIncidentsDot && <RedDot />}
+          </div>
           <span className="truncate">Incidents</span>
         </button>
 
@@ -198,7 +254,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
           }`}
         >
-          <Layers className={`w-4 h-4 ${activeTab === 'zones' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+          <div className="relative flex items-center justify-center">
+            <Layers className={`w-4 h-4 ${activeTab === 'zones' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+            {showZonesDot && <RedDot />}
+          </div>
           <span className="truncate">Zones</span>
         </button>
 
@@ -211,7 +270,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
           }`}
         >
-          <Landmark className={`w-4 h-4 ${activeTab === 'stations' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+          <div className="relative flex items-center justify-center">
+            <Landmark className={`w-4 h-4 ${activeTab === 'stations' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+            {showStationsDot && <RedDot />}
+          </div>
           <span className="truncate">Stations</span>
         </button>
 
@@ -224,7 +286,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
           }`}
         >
-          <Users className={`w-4 h-4 ${activeTab === 'users' || activeTab === 'customers' || activeTab === 'drivers' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+          <div className="relative flex items-center justify-center">
+            <Users className={`w-4 h-4 ${activeTab === 'users' || activeTab === 'customers' || activeTab === 'drivers' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+            {showUsersDot && <RedDot />}
+          </div>
           <span className="truncate">Accounts</span>
         </button>
 
@@ -237,7 +302,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
           }`}
         >
-          <Route className={`w-4 h-4 ${activeTab === 'rides' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+          <div className="relative flex items-center justify-center">
+            <Route className={`w-4 h-4 ${activeTab === 'rides' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+            {showRidesDot && <RedDot />}
+          </div>
           <span className="truncate">Trips</span>
         </button>
 
@@ -250,7 +318,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
           }`}
         >
-          <Cpu className={`w-4 h-4 ${activeTab === 'ebikes' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+          <div className="relative flex items-center justify-center">
+            <Cpu className={`w-4 h-4 ${activeTab === 'ebikes' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+            {showEbikesDot && <RedDot />}
+          </div>
           <span className="truncate">Shuttles</span>
         </button>
 
@@ -263,7 +334,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
           }`}
         >
-          <Settings className={`w-4 h-4 ${activeTab === 'settings' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+          <div className="relative flex items-center justify-center">
+            <Settings className={`w-4 h-4 ${activeTab === 'settings' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+            {showSettingsDot && <RedDot />}
+          </div>
           <span className="truncate">Settings</span>
         </button>
       </div>

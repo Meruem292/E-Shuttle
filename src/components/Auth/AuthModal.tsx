@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Upload, Image as ImageIcon, FileCheck, X, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBackHandler } from '../../contexts/NativeBackContext';
 import { useAppLogo } from '../../services/logoService';
@@ -63,9 +63,45 @@ export const AuthModal: React.FC = () => {
   const [password, setPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
 
+  // Driver Specific Fields
+  const [driverLicenseCardUrl, setDriverLicenseCardUrl] = useState<string>('');
+  const [driverLicenseNumber, setDriverLicenseNumber] = useState<string>('');
+  const [licenseUploading, setLicenseUploading] = useState<boolean>(false);
+
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+
+  // Handle Driver's License Picture File Selection & Base64 Data URL Conversion
+  const handleLicenseCardUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setErrorMsg("Invalid file format. Please upload a picture of your Driver's License (JPG, PNG, WEBP).");
+      return;
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      setErrorMsg("Image size exceeds 8MB. Please select a smaller photo of your Driver's License.");
+      return;
+    }
+
+    setLicenseUploading(true);
+    setErrorMsg(null);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      setDriverLicenseCardUrl(result);
+      setLicenseUploading(false);
+    };
+    reader.onerror = () => {
+      setErrorMsg("Failed to process Driver's License image. Please try again.");
+      setLicenseUploading(false);
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Translate Firebase error codes to readable messages
   const formatFirebaseError = (err: any): string => {
@@ -108,7 +144,21 @@ export const AuthModal: React.FC = () => {
         if (roleSelection === 'customer') {
           await signUpCustomer(fullName, email, phone, password);
         } else if (roleSelection === 'driver') {
-          await signUpDriver(fullName, email, phone, password);
+          if (!driverLicenseCardUrl) {
+            setErrorMsg("Driver's License card photo is required for driver registration and admin validation.");
+            setLoading(false);
+            return;
+          }
+          await signUpDriver(
+            fullName,
+            email,
+            phone,
+            password,
+            'E-Shuttle Transit',
+            'Unassigned E-Shuttle',
+            driverLicenseCardUrl,
+            driverLicenseNumber
+          );
         }
       } else if (mode === 'forgot') {
         if (!email) {
@@ -297,6 +347,84 @@ export const AuthModal: React.FC = () => {
                   className="w-full mt-1 bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] placeholder-slate-400 focus:outline-none focus:border-[#1565C0] focus:bg-white transition-colors"
                 />
               </div>
+
+              {roleSelection === 'driver' && (
+                <div className="space-y-3 pt-1 border-t border-[#0D47A1]/20">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-extrabold text-[#0D47A1] flex items-center gap-1">
+                      <span>Driver's License Card Picture</span>
+                      <span className="text-rose-600 font-bold text-xs">*Required</span>
+                    </label>
+                    <span className="text-[9px] text-[#0D47A1]/80 bg-[#E3F2FD] px-2 py-0.5 rounded-full font-bold">
+                      Admin Validation
+                    </span>
+                  </div>
+
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="Driver's License Number (Optional, e.g. N01-12-345678)"
+                      value={driverLicenseNumber}
+                      onChange={(e) => setDriverLicenseNumber(e.target.value)}
+                      className="w-full bg-[#F8FAFC] border-2 border-[#0D47A1] rounded-xl p-2.5 text-xs text-[#0D47A1] font-mono placeholder-slate-400 focus:outline-none focus:border-[#1565C0]"
+                    />
+                  </div>
+
+                  {driverLicenseCardUrl ? (
+                    <div className="relative bg-[#F8FAFC] border-2 border-emerald-500 rounded-2xl p-2.5 shadow-sm space-y-2">
+                      <div className="flex items-center justify-between text-xs text-emerald-800 font-bold">
+                        <span className="flex items-center gap-1.5">
+                          <FileCheck className="w-4 h-4 text-emerald-600" />
+                          <span>Driver's License Card Uploaded</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setDriverLicenseCardUrl('')}
+                          className="text-slate-400 hover:text-rose-600 p-1 rounded-lg transition-colors"
+                          title="Remove photo and upload a different one"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <div className="relative w-full h-36 bg-slate-100 rounded-xl overflow-hidden border border-slate-300">
+                        <img
+                          src={driverLicenseCardUrl}
+                          alt="Uploaded Driver's License Card"
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute bottom-1 right-1 bg-black/75 text-white text-[9px] font-bold px-2 py-0.5 rounded-md">
+                          Preview
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <label className="relative flex flex-col items-center justify-center p-4 bg-[#F8FAFC] hover:bg-[#E3F2FD]/50 border-2 border-dashed border-[#0D47A1] rounded-2xl cursor-pointer transition-all active:scale-[0.99]">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        required
+                        disabled={licenseUploading}
+                        onChange={handleLicenseCardUpload}
+                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      />
+                      <div className="w-10 h-10 bg-[#E3F2FD] border border-[#0D47A1] text-[#0D47A1] rounded-2xl flex items-center justify-center mb-2 shadow-sm">
+                        {licenseUploading ? (
+                          <Upload className="w-5 h-5 animate-bounce text-[#0D47A1]" />
+                        ) : (
+                          <ImageIcon className="w-5 h-5 text-[#0D47A1]" />
+                        )}
+                      </div>
+                      <span className="text-xs font-black text-[#0D47A1]">
+                        {licenseUploading ? 'Processing Card Photo...' : 'Upload Driver\'s License Card Photo'}
+                      </span>
+                      <span className="text-[10px] text-slate-500 mt-0.5 text-center font-medium">
+                        Take a clear picture or upload image of your official Driver's License
+                      </span>
+                    </label>
+                  )}
+                </div>
+              )}
             </>
           )}
 

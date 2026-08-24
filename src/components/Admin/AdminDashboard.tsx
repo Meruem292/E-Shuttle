@@ -323,6 +323,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedCustomer, setSelectedCustomer] = useState<UserProfile | null>(null);
   const [selectedDriverModal, setSelectedDriverModal] = useState<DriverProfile | null>(null);
   const [selectedBookingModal, setSelectedBookingModal] = useState<Booking | null>(null);
+  const [licensePreviewUrl, setLicensePreviewUrl] = useState<string | null>(null);
 
   // Incident Tickets & Support Channels State
   const [supportChannels, setSupportChannels] = useState<ChatChannel[]>([]);
@@ -352,6 +353,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     },
     20,
     'admin-booking-modal'
+  );
+
+  useBackHandler(
+    licensePreviewUrl !== null,
+    () => {
+      setLicensePreviewUrl(null);
+      return true;
+    },
+    30,
+    'admin-license-preview-modal'
   );
 
   useBackHandler(
@@ -401,6 +412,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
     return () => unsubRfid();
   }, []);
+
+  // Sync activeTab prop with userTabRole sub-tab filter
+  useEffect(() => {
+    if (activeTab === 'customers') {
+      setUserTabRole('CUSTOMERS');
+    } else if (activeTab === 'drivers') {
+      setUserTabRole('DRIVERS');
+    }
+  }, [activeTab]);
 
   // Load Admin Data (Customers, Drivers, Bookings, Settings)
   useEffect(() => {
@@ -631,6 +651,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Filtered Customers
   const filteredCustomers = customersOnly.filter((c) => {
+    // Hide passengers when viewing PENDING approvals tab
+    if (userTabRole === 'PENDING') return false;
+
     const q = accountSearch.toLowerCase();
     const matchesSearch =
       c.fullName?.toLowerCase().includes(q) ||
@@ -653,6 +676,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Filtered Drivers
   const filteredDrivers = drivers.filter((d) => {
+    // If sub-tab filter is PENDING, strictly return drivers awaiting approval (accountStatus === 'PENDING')
+    if (userTabRole === 'PENDING' && d.accountStatus !== 'PENDING') {
+      return false;
+    }
+
     const q = accountSearch.toLowerCase();
     const matchesSearch =
       d.fullName?.toLowerCase().includes(q) ||
@@ -1221,9 +1249,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 )}
 
+                {userTabRole === 'PENDING' && (
+                  <div className="flex items-center justify-between pt-2 pb-1 border-b-2 border-amber-400">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-amber-800 flex items-center gap-1.5">
+                      <UserCheck className="w-4 h-4 text-amber-600" />
+                      <span>Drivers Awaiting Admin Approval ({filteredDrivers.length})</span>
+                    </h3>
+                  </div>
+                )}
+
                 {filteredDrivers.length === 0 && (userTabRole === 'DRIVERS' || userTabRole === 'PENDING') ? (
                   <div className="p-8 text-center text-slate-500 text-xs bg-white rounded-3xl border-2 border-[#0D47A1] shadow-md">
-                    No matching driver accounts found.
+                    {userTabRole === 'PENDING'
+                      ? 'No pending driver approvals at this time. All driver registrations are reviewed!'
+                      : 'No matching driver accounts found.'}
                   </div>
                 ) : (
                   filteredDrivers.map((dr) => (
@@ -1302,6 +1341,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             ) : (
                               <span className="text-[10px] text-amber-700 italic font-bold">
                                 * No RFID Linked
+                              </span>
+                            )}
+
+                            {dr.driverLicenseCardUrl ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setLicensePreviewUrl(dr.driverLicenseCardUrl || null);
+                                }}
+                                className="text-[10px] font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 px-2 py-0.5 rounded-lg flex items-center gap-1 transition-colors"
+                                title="Click to view Driver's License Card photo"
+                              >
+                                <ImageIcon className="w-3 h-3 text-emerald-700" />
+                                <span>License Card Uploaded</span>
+                              </button>
+                            ) : (
+                              <span className="text-[10px] text-rose-700 font-bold bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3 text-rose-600" />
+                                <span>No License Uploaded</span>
                               </span>
                             )}
                           </div>
@@ -2114,6 +2173,71 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
+            {/* DRIVER'S LICENSE CARD VALIDATION SECTION */}
+            <div className="bg-[#F8FAFC] p-3.5 rounded-2xl border-2 border-[#0D47A1]/30 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <CreditCard className="w-4 h-4 text-[#0D47A1]" />
+                  <span className="text-xs font-black text-[#0D47A1] uppercase tracking-wider">
+                    Driver's License Card Validation
+                  </span>
+                </div>
+                {selectedDriverModal.driverLicenseCardUrl ? (
+                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    Photo Uploaded
+                  </span>
+                ) : (
+                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                    Pending Upload
+                  </span>
+                )}
+              </div>
+
+              {selectedDriverModal.driverLicenseNumber && (
+                <div className="text-xs">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase">License Number: </span>
+                  <span className="font-mono font-bold text-[#0D47A1]">
+                    {selectedDriverModal.driverLicenseNumber}
+                  </span>
+                </div>
+              )}
+
+              {selectedDriverModal.driverLicenseCardUrl ? (
+                <div className="space-y-1.5">
+                  <div
+                    onClick={() => setLicensePreviewUrl(selectedDriverModal.driverLicenseCardUrl || null)}
+                    className="relative w-full h-40 bg-slate-200 rounded-xl overflow-hidden border-2 border-[#0D47A1] cursor-pointer group shadow-sm"
+                  >
+                    <img
+                      src={selectedDriverModal.driverLicenseCardUrl}
+                      alt="Driver License Card"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                    />
+                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-xs gap-1">
+                      <Eye className="w-4 h-4" />
+                      <span>Click to Enlarge License Card</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setLicensePreviewUrl(selectedDriverModal.driverLicenseCardUrl || null)}
+                    className="w-full py-1.5 bg-[#E3F2FD] hover:bg-[#90CAF9]/40 text-[#0D47A1] border border-[#0D47A1] rounded-xl text-[10px] font-bold uppercase flex items-center justify-center gap-1 transition-colors"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>View Full Resolution License Card</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 font-medium text-center space-y-1">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 mx-auto" />
+                  <p className="font-bold">No Driver's License Card uploaded yet</p>
+                  <p className="text-[10px] text-amber-700">
+                    The driver registered prior to the license card requirement.
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* Ride History */}
             <div className="flex-1 overflow-y-auto space-y-3">
               <div className="text-xs font-bold uppercase text-slate-500">
@@ -2563,6 +2687,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
+      {/* Bottom Clearance Spacer for Fixed Navigation Bar */}
+      <div className="h-32 w-full shrink-0" />
+
       {/* Direct Ticket & Direct User 2-Way Chat Drawer */}
       {(selectedTicketChannelId || directChatTarget) && (
         <ChatDrawer
@@ -2574,6 +2701,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           initialChannelId={selectedTicketChannelId}
           initialTargetUser={directChatTarget || undefined}
         />
+      )}
+
+      {/* FULL RESOLUTION DRIVER'S LICENSE CARD LIGHTBOX MODAL */}
+      {licensePreviewUrl && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-4 max-w-2xl w-full shadow-2xl space-y-3 my-auto text-[#0D47A1] relative">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+              <div className="flex items-center gap-2">
+                <CreditCard className="w-5 h-5 text-[#0D47A1]" />
+                <h3 className="text-sm font-black text-[#0D47A1]">Driver's License Card Validation Photo</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLicensePreviewUrl(null)}
+                className="w-8 h-8 bg-[#E3F2FD] hover:bg-[#0D47A1] text-[#0D47A1] hover:text-white rounded-full flex items-center justify-center font-bold text-xs transition-colors"
+                title="Close photo viewer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="relative w-full max-h-[70vh] overflow-auto bg-slate-900 rounded-2xl flex items-center justify-center p-2 border border-slate-300">
+              <img
+                src={licensePreviewUrl}
+                alt="Driver License Full Quality"
+                className="max-w-full max-h-[65vh] object-contain rounded-lg"
+              />
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[10px] text-slate-500 font-medium">
+                Official E-Shuttle Driver Document - Admin Validation View
+              </span>
+              <button
+                type="button"
+                onClick={() => setLicensePreviewUrl(null)}
+                className="px-4 py-2 bg-[#0D47A1] hover:bg-[#1565C0] text-white font-black text-xs rounded-xl shadow uppercase tracking-wider"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
