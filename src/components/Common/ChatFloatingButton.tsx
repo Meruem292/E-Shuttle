@@ -27,22 +27,26 @@ export const ChatFloatingButton: React.FC<ChatFloatingButtonProps> = ({
 
   const isOpen = externalIsOpen !== undefined ? externalIsOpen || internalIsOpen : internalIsOpen;
 
-  const currentUserId = currentUser?.uid || (role === 'admin' ? 'admin' : '');
+  const currentUserId = role === 'admin' ? 'admin' : (currentUser?.uid || '');
   const currentUserRole = role || 'customer';
 
   useEffect(() => {
     if (!currentUserId) return;
 
     const unsub = subscribeToUserChannels(currentUserId, currentUserRole, (channels) => {
-      const total = channels.reduce(
-        (acc, c) => acc + (c.unreadCounts?.[currentUserId] || 0),
-        0
-      );
+      const total = channels.reduce((acc, c) => {
+        const uMain = c.unreadCounts?.[currentUserId] || 0;
+        const uAdminExtra =
+          role === 'admin' && currentUser?.uid && currentUser.uid !== 'admin'
+            ? c.unreadCounts?.[currentUser.uid] || 0
+            : 0;
+        return acc + uMain + uAdminExtra;
+      }, 0);
       setUnreadCount(total);
     });
 
     return () => unsub();
-  }, [currentUserId, currentUserRole]);
+  }, [currentUserId, currentUserRole, role, currentUser?.uid]);
 
   if (!currentUser && role !== 'admin') return null;
 

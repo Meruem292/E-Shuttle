@@ -31,6 +31,10 @@ import {
   INCIDENT_CATEGORIES,
 } from '../../services/ticketService';
 import {
+  subscribeToUserChannels,
+  ChatChannel,
+} from '../../services/chatService';
+import {
   LogOut,
   CheckCircle,
   XCircle,
@@ -53,6 +57,7 @@ import {
   ShieldAlert,
   AlertTriangle,
   MessageSquare,
+  Headphones,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -113,10 +118,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedDriverModal, setSelectedDriverModal] = useState<DriverProfile | null>(null);
   const [selectedBookingModal, setSelectedBookingModal] = useState<Booking | null>(null);
 
-  // Incident Tickets State
+  // Incident Tickets & Support Channels State
+  const [supportChannels, setSupportChannels] = useState<ChatChannel[]>([]);
   const [incidentTickets, setIncidentTickets] = useState<IncidentTicket[]>([]);
   const [ticketStatusFilter, setTicketStatusFilter] = useState<string>('ALL');
   const [selectedTicketChannelId, setSelectedTicketChannelId] = useState<string | null>(null);
+  const [directChatTarget, setDirectChatTarget] = useState<{ id: string; name: string; role: 'customer' | 'driver' | 'admin' } | null>(null);
 
   // Native Back Button Handlers for Admin Modals
   useBackHandler(
@@ -254,9 +261,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setZones(zList);
     });
 
-    // 6. Subscribe to Incident Tickets
+    // 6. Subscribe to Incident Tickets & Support Channels
     const unsubTickets = subscribeToTickets('admin', 'admin', (tList) => {
       setIncidentTickets(tList);
+    });
+
+    const unsubChannels = subscribeToUserChannels('admin', 'admin', (chans) => {
+      setSupportChannels(chans);
     });
 
     return () => {
@@ -265,6 +276,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       unsubBookings();
       unsubZones();
       unsubTickets();
+      unsubChannels();
     };
   }, [currentUser]);
 
@@ -1099,11 +1111,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {/* Actions */}
                       <div className="flex items-center gap-2 shrink-0 flex-wrap">
                         <button
-                          onClick={() => setSelectedDriverModal(dr)}
-                          title="View driver profile and operational stats"
+                          onClick={() => setDirectChatTarget({ id: dr.uid, name: dr.fullName, role: 'driver' })}
+                          title="Open direct 2-way dispatch chat with driver"
                           className="px-3 py-1.5 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform shadow-sm"
                         >
-                          <Eye className="w-3.5 h-3.5 text-[#90CAF9]" />
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          <span>Chat</span>
+                        </button>
+
+                        <button
+                          onClick={() => setSelectedDriverModal(dr)}
+                          title="View driver profile and operational stats"
+                          className="px-3 py-1.5 bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD] text-[#0D47A1] rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-transform shadow-sm"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-[#0D47A1]" />
                           <span>Profile</span>
                         </button>
 
@@ -1231,11 +1252,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         {/* Actions */}
                         <div className="flex items-center gap-2 shrink-0">
                           <button
-                            onClick={() => setSelectedCustomer(cust)}
-                            title="View user profile and transit history"
+                            onClick={() => setDirectChatTarget({ id: cust.uid, name: cust.fullName, role: 'customer' })}
+                            title="Open direct 2-way support chat with passenger"
                             className="px-3.5 py-2 bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-transform shadow-sm"
                           >
-                            <Eye className="w-3.5 h-3.5 text-[#90CAF9]" />
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            <span>Chat</span>
+                          </button>
+
+                          <button
+                            onClick={() => setSelectedCustomer(cust)}
+                            title="View user profile and transit history"
+                            className="px-3.5 py-2 bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD] text-[#0D47A1] rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-transform shadow-sm"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-[#0D47A1]" />
                             <span>Profile</span>
                           </button>
 
@@ -1826,7 +1856,79 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           VIEW 5.5: INCIDENTS & SUPPORT TICKETS MANAGEMENT
          ========================================================================= */}
       {currentTab === 'incidents' && (
-        <div className="space-y-4 animate-in fade-in duration-200">
+        <div className="space-y-5 animate-in fade-in duration-200">
+          {/* Live 2-Way Helpdesk Support Channels Card Section */}
+          <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-4 shadow-md space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-[#0D47A1] text-white flex items-center justify-center font-black shrink-0">
+                  <Headphones className="w-4.5 h-4.5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm text-[#0D47A1]">
+                    Live Helpdesk User Support Chats ({supportChannels.length})
+                  </h3>
+                  <p className="text-[10px] text-slate-500 font-bold">
+                    2-Way Passenger & Driver Dispatch Support Threads
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {supportChannels.length === 0 ? (
+              <div className="text-center py-6 text-slate-400 space-y-1 bg-[#F8FAFC] rounded-2xl border border-dashed border-slate-200">
+                <MessageSquare className="w-7 h-7 mx-auto text-slate-300" />
+                <p className="text-xs font-bold text-slate-600">No active user support chats</p>
+                <p className="text-[10px] text-slate-400">
+                  User support chats will automatically appear here when passengers or drivers open Help Desk.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {supportChannels.map((c) => {
+                  const unread = c.unreadCounts?.['admin'] || 0;
+                  return (
+                    <div
+                      key={c.id}
+                      onClick={() => setSelectedTicketChannelId(c.id)}
+                      className="p-3 bg-[#F8FAFC] hover:bg-[#E3F2FD] border-2 border-slate-200 hover:border-[#0D47A1] rounded-2xl cursor-pointer transition-all flex items-center justify-between gap-2 shadow-sm"
+                    >
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black text-[#0D47A1] truncate">
+                            {c.title || 'Support Chat'}
+                          </span>
+                          {unread > 0 && (
+                            <span className="px-2 py-0.5 bg-rose-600 text-white font-black text-[9px] rounded-full animate-pulse shrink-0">
+                              {unread} NEW
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-600 font-medium truncate">
+                          {c.lastMessage || 'Channel active'}
+                        </p>
+                        <p className="text-[9px] text-slate-400 font-bold">
+                          {c.updatedAt ? new Date(c.updatedAt).toLocaleString() : ''}
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedTicketChannelId(c.id);
+                        }}
+                        className="px-3 py-1.5 bg-[#0D47A1] text-white font-black text-xs rounded-xl shadow shrink-0 hover:bg-[#1565C0] flex items-center gap-1 active:scale-95 transition-transform"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>Chat</span>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Ticket Filter Chips */}
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
             {[
@@ -1959,12 +2061,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* Direct Ticket 2-Way Chat Drawer */}
-      {selectedTicketChannelId && (
+      {/* Direct Ticket & Direct User 2-Way Chat Drawer */}
+      {(selectedTicketChannelId || directChatTarget) && (
         <ChatDrawer
-          isOpen={!!selectedTicketChannelId}
-          onClose={() => setSelectedTicketChannelId(null)}
+          isOpen={!!(selectedTicketChannelId || directChatTarget)}
+          onClose={() => {
+            setSelectedTicketChannelId(null);
+            setDirectChatTarget(null);
+          }}
           initialChannelId={selectedTicketChannelId}
+          initialTargetUser={directChatTarget || undefined}
         />
       )}
     </div>

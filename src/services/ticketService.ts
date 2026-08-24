@@ -227,12 +227,8 @@ export function subscribeToTickets(
 
         list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-        if (list.length > 0) {
-          saveLocalTickets(list);
-          callback(list);
-        } else {
-          callback(filterLocalTickets(uid, role));
-        }
+        saveLocalTickets(list);
+        callback(list);
       },
       (err) => {
         if (err.code !== 'permission-denied') {

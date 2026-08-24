@@ -56,10 +56,12 @@ export function getChannelId(
     return `booking_${bookingId}`;
   }
   if (type === 'user_admin') {
-    return `ua_${p1}`;
+    const userId = p1 === 'admin' ? p2 : p1;
+    return `ua_${userId || 'support'}`;
   }
   if (type === 'driver_admin') {
-    return `da_${p1}`;
+    const driverId = p1 === 'admin' ? p2 : p1;
+    return `da_${driverId || 'dispatch'}`;
   }
   if (type === 'user_driver' && p2) {
     const sorted = [p1, p2].sort().join('_');
@@ -160,10 +162,12 @@ export async function getOrCreateChannel(
     defaultTitle = `${creator.name} & ${target?.name || 'Driver'}`;
     defaultSubtitle = 'Direct Chat';
   } else if (type === 'user_admin') {
-    defaultTitle = `Customer Support (${creator.name})`;
+    const custName = creator.role === 'admin' ? target?.name || 'Passenger' : creator.name;
+    defaultTitle = titleOverride || `Customer Support (${custName})`;
     defaultSubtitle = '2-Way Admin Help Channel';
   } else if (type === 'driver_admin') {
-    defaultTitle = `Driver Dispatch Support (${creator.name})`;
+    const drName = creator.role === 'admin' ? target?.name || 'Driver' : creator.name;
+    defaultTitle = titleOverride || `Driver Dispatch Support (${drName})`;
     defaultSubtitle = '2-Way Admin Dispatch Channel';
   }
 
@@ -271,6 +275,35 @@ export async function sendChatMessage(
         lastMessage: cleanText,
         lastMessageTime: serverTimestamp(),
         unreadCounts: updatedUnread,
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      // If parent channel doc does not exist yet in Firestore, create it now
+      const isSupport = channelId.startsWith('ua_') || channelId.startsWith('da_');
+      const ctype: ChatChannelType = channelId.startsWith('da_')
+        ? 'driver_admin'
+        : channelId.startsWith('ua_')
+        ? 'user_admin'
+        : 'user_driver';
+
+      const participants = [senderId];
+      if (isSupport && !participants.includes('admin')) {
+        participants.push('admin');
+      }
+
+      await setDoc(channelRef, {
+        id: channelId,
+        channelType: ctype,
+        participants,
+        participantNames: { [senderId]: senderName, admin: 'E-Shuttle Admin Support' },
+        participantRoles: { [senderId]: senderRole, admin: 'admin' },
+        lastMessage: cleanText,
+        lastMessageSenderId: senderId,
+        lastMessageTime: serverTimestamp(),
+        unreadCounts: { [senderId]: 0, admin: senderRole === 'admin' ? 0 : 1 },
+        title: senderRole === 'admin' ? 'Customer Support' : `${senderName} Support`,
+        subtitle: '2-Way Live Support',
+        createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
     }
@@ -405,14 +438,23 @@ export function subscribeToUserChannels(
           });
         });
 
-        chans.sort((a, b) => {
+        // Merge with local channels so local creations aren't wiped
+        const localChans = filterLocalChannels(uid, role);
+        const mergedMap = new Map<string, ChatChannel>();
+        chans.forEach((c) => mergedMap.set(c.id, c));
+        localChans.forEach((lc) => {
+          if (!mergedMap.has(lc.id)) {
+            mergedMap.set(lc.id, lc);
+          }
+        });
+        const finalChans = Array.from(mergedMap.values()).sort((a, b) => {
           const tA = new Date(a.updatedAt || a.lastMessageTime || 0).getTime();
           const tB = new Date(b.updatedAt || b.lastMessageTime || 0).getTime();
           return tB - tA;
         });
 
-        saveLocalChannels(chans);
-        callback(chans);
+        saveLocalChannels(finalChans);
+        callback(finalChans);
       },
       (err) => {
         if (err.code !== 'permission-denied') {
@@ -443,14 +485,23 @@ function filterLocalChannels(uid: string, role: 'customer' | 'driver' | 'admin')
 }
 
 // 5. Mark Channel as Read
-export async function markChannelAsRead(channelId: string, uid: string): Promise<void> {
+export async function markChannelAsRead(
+  channelId: string,
+  uid: string,
+  role?: 'customer' | 'driver' | 'admin'
+): Promise<void> {
   const channelRef = doc(db, 'chatChannels', channelId);
+  const isAdmin = role === 'admin' || uid === 'admin';
+
   try {
     const snap = await getDoc(channelRef);
     if (snap.exists()) {
       const cData = snap.data() as ChatChannel;
       const unreads = { ...(cData.unreadCounts || {}) };
       unreads[uid] = 0;
+      if (isAdmin) {
+        unreads['admin'] = 0;
+      }
       await updateDoc(channelRef, {
         unreadCounts: unreads,
       });
@@ -464,6 +515,9 @@ export async function markChannelAsRead(channelId: string, uid: string): Promise
   if (idx >= 0) {
     localChans[idx].unreadCounts = localChans[idx].unreadCounts || {};
     localChans[idx].unreadCounts![uid] = 0;
+    if (isAdmin) {
+      localChans[idx].unreadCounts!['admin'] = 0;
+    }
     saveLocalChannels(localChans);
     notifyLocalSubscribers();
   }

@@ -54,7 +54,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
 }) => {
   const { currentUser, userProfile, driverProfile, role } = useAuth();
 
-  const currentUserId = currentUser?.uid || (role === 'admin' ? 'admin' : '');
+  const currentUserId = role === 'admin' ? 'admin' : (currentUser?.uid || '');
   const currentUserName =
     role === 'admin'
       ? 'E-Shuttle Admin Support'
@@ -76,7 +76,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  // 1. Handle auto-opening direct channels when target user is provided
+  // 1. Handle auto-opening direct channels when target user is provided or auto-create support channel for customers/drivers
   useEffect(() => {
     if (!isOpen) return;
 
@@ -92,8 +92,20 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
       ).then((cid) => {
         setActiveChannelId(cid);
       });
+    } else if (currentUserRole !== 'admin' && currentUserId) {
+      // Auto-ensure user/driver support channel exists in Firestore as soon as drawer is opened
+      const ctype: ChatChannelType = currentUserRole === 'driver' ? 'driver_admin' : 'user_admin';
+      getOrCreateChannel(
+        ctype,
+        { id: currentUserId, name: currentUserName, role: currentUserRole },
+        { id: 'admin', name: 'E-Shuttle Admin Support', role: 'admin' }
+      ).then((cid) => {
+        if (!activeChannelId) {
+          setActiveChannelId(cid);
+        }
+      });
     }
-  }, [isOpen, initialChannelId, initialTargetUser, initialChannelType, initialBookingId]);
+  }, [isOpen, initialChannelId, initialTargetUser, initialChannelType, initialBookingId, currentUserRole, currentUserId, currentUserName]);
 
   // 2. Subscribe to User Channels
   useEffect(() => {
@@ -120,7 +132,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
       return;
     }
 
-    markChannelAsRead(activeChannelId, currentUserId);
+    markChannelAsRead(activeChannelId, currentUserId, currentUserRole);
 
     const unsubMessages = subscribeToMessages(activeChannelId, (msgs) => {
       setMessages(msgs);
@@ -202,7 +214,12 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
     if (!titleMatch && !msgMatch) return false;
 
     if (filterTab === 'support') {
-      return c.channelType === 'user_admin' || c.channelType === 'driver_admin';
+      return (
+        c.channelType === 'user_admin' ||
+        c.channelType === 'driver_admin' ||
+        c.id.startsWith('ua_') ||
+        c.id.startsWith('da_')
+      );
     }
     if (filterTab === 'direct') {
       return c.channelType === 'user_driver' || c.channelType === 'booking';
@@ -293,7 +310,9 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                   </div>
                 ) : (
                   messages.map((msg) => {
-                    const isMe = msg.senderId === currentUserId;
+                    const isMe =
+                      msg.senderId === currentUserId ||
+                      (currentUserRole === 'admin' && (msg.senderRole === 'admin' || msg.senderId === 'admin'));
                     const isAdmin = msg.senderRole === 'admin';
                     const isDriver = msg.senderRole === 'driver';
 
@@ -553,7 +572,11 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                     </div>
                   ) : (
                     filteredChannels.map((c) => {
-                      const unread = c.unreadCounts?.[currentUserId] || 0;
+                      const unread =
+                        (c.unreadCounts?.[currentUserId] || 0) +
+                        (currentUserRole === 'admin' && currentUser?.uid && currentUser.uid !== 'admin'
+                          ? c.unreadCounts?.[currentUser.uid] || 0
+                          : 0);
                       const isSupport = c.channelType === 'user_admin' || c.channelType === 'driver_admin';
 
                       return (
