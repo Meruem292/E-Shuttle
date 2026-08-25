@@ -25,6 +25,7 @@ import officialLogo from '../../images/official_logo.jpg';
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
 import { ChatFloatingButton } from '../Common/ChatFloatingButton';
 import { ChatDrawer } from '../Common/ChatDrawer';
+import { FaqAboutModal } from '../Common/FaqAboutModal';
 import {
   IncidentTicket,
   subscribeToTickets,
@@ -37,6 +38,7 @@ import {
 } from '../../services/chatService';
 import {
   LogOut,
+  HelpCircle,
   CheckCircle,
   XCircle,
   Ban,
@@ -331,6 +333,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [ticketStatusFilter, setTicketStatusFilter] = useState<string>('ALL');
   const [selectedTicketChannelId, setSelectedTicketChannelId] = useState<string | null>(null);
   const [directChatTarget, setDirectChatTarget] = useState<{ id: string; name: string; role: 'customer' | 'driver' | 'admin' } | null>(null);
+  const [isFaqOpen, setIsFaqOpen] = useState<boolean>(false);
 
   // Native Back Button Handlers for Admin Modals
   useBackHandler(
@@ -811,14 +814,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={logout}
-          className="px-3 py-1.5 bg-white border-2 border-[#0D47A1] rounded-xl text-[#0D47A1] hover:bg-[#E3F2FD] transition-colors font-bold text-xs uppercase flex items-center gap-1.5 active:scale-95 shadow-sm shrink-0"
-          title="Sign out of administrator session"
-        >
-          <LogOut className="w-3.5 h-3.5 text-[#0D47A1]" />
-          <span className="hidden sm:inline">Sign Out</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setIsFaqOpen(true)}
+            className="px-3 py-1.5 bg-[#0D47A1] text-white hover:bg-[#1565C0] border-2 border-[#0D47A1] rounded-xl font-black text-xs uppercase flex items-center gap-1.5 active:scale-95 shadow-sm transition-all"
+            title="View Official Program Specs, FAQs, Routes & Developer Team"
+          >
+            <HelpCircle className="w-3.5 h-3.5 text-amber-300" />
+            <span className="hidden sm:inline">Info & FAQs</span>
+          </button>
+
+          <button
+            onClick={logout}
+            className="px-3 py-1.5 bg-white border-2 border-[#0D47A1] rounded-xl text-[#0D47A1] hover:bg-[#E3F2FD] transition-colors font-bold text-xs uppercase flex items-center gap-1.5 active:scale-95 shadow-sm shrink-0"
+            title="Sign out of administrator session"
+          >
+            <LogOut className="w-3.5 h-3.5 text-[#0D47A1]" />
+            <span className="hidden sm:inline">Sign Out</span>
+          </button>
+        </div>
       </div>
 
 
@@ -2745,6 +2759,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* FAQs, Route Specs, History & Developer Team Info Modal */}
+      <FaqAboutModal
+        isOpen={isFaqOpen}
+        onClose={() => setIsFaqOpen(false)}
+      />
     </div>
   );
 };

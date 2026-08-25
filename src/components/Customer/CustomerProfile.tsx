@@ -1,14 +1,22 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { LogOut } from 'lucide-react';
+import { LogOut, HelpCircle, Info, ChevronRight, Bus } from 'lucide-react';
 import { PWAInstallButton } from '../PWAInstallPrompt';
 import { useAppLogo } from '../../services/logoService';
+import { FaqAboutModal } from '../Common/FaqAboutModal';
 import scsLogo from '../../images/scs_logo.jpg';
 import cctLogo from '../../images/cct_logo.jpg';
 
 export const CustomerProfile: React.FC = () => {
   const { userProfile, logout } = useAuth();
   const { logoUrl: appLogo } = useAppLogo();
+  const [isFaqOpen, setIsFaqOpen] = useState<boolean>(false);
+  const [faqTab, setFaqTab] = useState<'faqs' | 'routes' | 'history' | 'about'>('faqs');
+
+  const openFaqTab = (tab: 'faqs' | 'routes' | 'history' | 'about') => {
+    setFaqTab(tab);
+    setIsFaqOpen(true);
+  };
 
   return (
     <div className="h-full overflow-y-auto bg-[#E3F2FD] text-[#0D47A1] p-4 pb-36 max-w-md mx-auto space-y-5">
@@ -52,6 +60,71 @@ export const CustomerProfile: React.FC = () => {
             <span className="text-slate-400 uppercase font-mono text-[10px] font-bold">Phone:</span>
             <span className="font-bold text-[#0D47A1]">{userProfile?.phone || '+63 917 123 4567'}</span>
           </div>
+        </div>
+      </div>
+
+      {/* FAQs & Information Center Card */}
+      <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-4 space-y-3 shadow-xl">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+          <div className="flex items-center gap-2">
+            <HelpCircle className="w-5 h-5 text-[#0D47A1]" />
+            <span className="text-xs font-black text-[#0D47A1] uppercase tracking-wider">
+              Tagaytay E-Shuttle Info Center
+            </span>
+          </div>
+          <span className="bg-amber-400 text-[#0D47A1] text-[9px] font-black uppercase px-2 py-0.5 rounded-full">
+            100% Free Ride
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <button
+            onClick={() => openFaqTab('faqs')}
+            className="p-3 bg-[#E3F2FD] hover:bg-[#90CAF9]/40 border border-[#0D47A1]/30 rounded-2xl flex flex-col items-start gap-1 transition-all text-left group"
+          >
+            <div className="flex items-center justify-between w-full">
+              <HelpCircle className="w-4 h-4 text-[#0D47A1]" />
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#0D47A1]" />
+            </div>
+            <span className="font-extrabold text-[#0D47A1]">Frequently Asked Questions</span>
+            <span className="text-[10px] text-slate-500 font-medium">Is it free? Safety & Rules</span>
+          </button>
+
+          <button
+            onClick={() => openFaqTab('routes')}
+            className="p-3 bg-[#E3F2FD] hover:bg-[#90CAF9]/40 border border-[#0D47A1]/30 rounded-2xl flex flex-col items-start gap-1 transition-all text-left group"
+          >
+            <div className="flex items-center justify-between w-full">
+              <Bus className="w-4 h-4 text-[#0D47A1]" />
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#0D47A1]" />
+            </div>
+            <span className="font-extrabold text-[#0D47A1]">37 Shuttle Fleet & Routes</span>
+            <span className="text-[10px] text-slate-500 font-medium">City Hall & TNHS Exits</span>
+          </button>
+
+          <button
+            onClick={() => openFaqTab('history')}
+            className="p-3 bg-[#E3F2FD] hover:bg-[#90CAF9]/40 border border-[#0D47A1]/30 rounded-2xl flex flex-col items-start gap-1 transition-all text-left group"
+          >
+            <div className="flex items-center justify-between w-full">
+              <Info className="w-4 h-4 text-[#0D47A1]" />
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#0D47A1]" />
+            </div>
+            <span className="font-extrabold text-[#0D47A1]">Program Launch History</span>
+            <span className="text-[10px] text-slate-500 font-medium">Cavite Times Journal 2025</span>
+          </button>
+
+          <button
+            onClick={() => openFaqTab('about')}
+            className="p-3 bg-[#E3F2FD] hover:bg-[#90CAF9]/40 border border-[#0D47A1]/30 rounded-2xl flex flex-col items-start gap-1 transition-all text-left group"
+          >
+            <div className="flex items-center justify-between w-full">
+              <Info className="w-4 h-4 text-[#0D47A1]" />
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#0D47A1]" />
+            </div>
+            <span className="font-extrabold text-[#0D47A1]">About Us & Developers</span>
+            <span className="text-[10px] text-slate-500 font-medium">Meet Maria, Daniella & team</span>
+          </button>
         </div>
       </div>
 
@@ -103,6 +176,12 @@ export const CustomerProfile: React.FC = () => {
           <span>SCS</span>
         </div>
       </div>
+
+      <FaqAboutModal
+        isOpen={isFaqOpen}
+        onClose={() => setIsFaqOpen(false)}
+        defaultTab={faqTab}
+      />
     </div>
   );
 };

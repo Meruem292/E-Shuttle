@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { LogOut, AlertTriangle } from 'lucide-react';
+import { LogOut, AlertTriangle, HelpCircle, Info, Bus, ChevronRight } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { PWAInstallButton } from '../PWAInstallPrompt';
 import { useAppLogo } from '../../services/logoService';
+import { FaqAboutModal } from '../Common/FaqAboutModal';
 import scsLogo from '../../images/scs_logo.jpg';
 import cctLogo from '../../images/cct_logo.jpg';
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
@@ -12,6 +13,13 @@ import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
 export const DriverProfile: React.FC = () => {
   const { currentUser, driverProfile, logout } = useAuth();
   const { logoUrl: appLogo } = useAppLogo();
+  const [isFaqOpen, setIsFaqOpen] = useState<boolean>(false);
+  const [faqTab, setFaqTab] = useState<'faqs' | 'routes' | 'history' | 'about'>('faqs');
+
+  const openFaqTab = (tab: 'faqs' | 'routes' | 'history' | 'about') => {
+    setFaqTab(tab);
+    setIsFaqOpen(true);
+  };
 
   const handleDismissNotice = async () => {
     if (currentUser) {
@@ -194,6 +202,71 @@ export const DriverProfile: React.FC = () => {
         </div>
       </div>
 
+      {/* FAQs & Service Route Information Card */}
+      <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-4 space-y-3 shadow-xl">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+          <div className="flex items-center gap-2">
+            <HelpCircle className="w-5 h-5 text-[#0D47A1]" />
+            <span className="text-xs font-black text-[#0D47A1] uppercase tracking-wider">
+              Route Info, FAQs & Developers
+            </span>
+          </div>
+          <span className="bg-amber-400 text-[#0D47A1] text-[9px] font-black uppercase px-2 py-0.5 rounded-full">
+            Driver Manual
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <button
+            onClick={() => openFaqTab('routes')}
+            className="p-3 bg-[#E3F2FD] hover:bg-[#90CAF9]/40 border border-[#0D47A1]/30 rounded-2xl flex flex-col items-start gap-1 transition-all text-left group"
+          >
+            <div className="flex items-center justify-between w-full">
+              <Bus className="w-4 h-4 text-[#0D47A1]" />
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#0D47A1]" />
+            </div>
+            <span className="font-extrabold text-[#0D47A1]">37 Fleet Route Specs</span>
+            <span className="text-[10px] text-slate-500 font-medium">TNHS Exits & City Hall Loop</span>
+          </button>
+
+          <button
+            onClick={() => openFaqTab('faqs')}
+            className="p-3 bg-[#E3F2FD] hover:bg-[#90CAF9]/40 border border-[#0D47A1]/30 rounded-2xl flex flex-col items-start gap-1 transition-all text-left group"
+          >
+            <div className="flex items-center justify-between w-full">
+              <HelpCircle className="w-4 h-4 text-[#0D47A1]" />
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#0D47A1]" />
+            </div>
+            <span className="font-extrabold text-[#0D47A1]">Driver FAQs & Safety</span>
+            <span className="text-[10px] text-slate-500 font-medium">Free fare policies</span>
+          </button>
+
+          <button
+            onClick={() => openFaqTab('history')}
+            className="p-3 bg-[#E3F2FD] hover:bg-[#90CAF9]/40 border border-[#0D47A1]/30 rounded-2xl flex flex-col items-start gap-1 transition-all text-left group"
+          >
+            <div className="flex items-center justify-between w-full">
+              <Info className="w-4 h-4 text-[#0D47A1]" />
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#0D47A1]" />
+            </div>
+            <span className="font-extrabold text-[#0D47A1]">Program Ordinance</span>
+            <span className="text-[10px] text-slate-500 font-medium">Mayor Brent Tolentino launch</span>
+          </button>
+
+          <button
+            onClick={() => openFaqTab('about')}
+            className="p-3 bg-[#E3F2FD] hover:bg-[#90CAF9]/40 border border-[#0D47A1]/30 rounded-2xl flex flex-col items-start gap-1 transition-all text-left group"
+          >
+            <div className="flex items-center justify-between w-full">
+              <Info className="w-4 h-4 text-[#0D47A1]" />
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#0D47A1]" />
+            </div>
+            <span className="font-extrabold text-[#0D47A1]">About Developer Team</span>
+            <span className="text-[10px] text-slate-500 font-medium">Maria, Daniella, Sean & Wilma</span>
+          </button>
+        </div>
+      </div>
+
       {/* Driver App Installation Card */}
       <div className="bg-white border-2 border-[#0D47A1] rounded-3xl p-4 space-y-2 shadow-xl">
         <div className="flex items-center justify-between">
@@ -241,6 +314,12 @@ export const DriverProfile: React.FC = () => {
           <span>SCS</span>
         </div>
       </div>
+
+      <FaqAboutModal
+        isOpen={isFaqOpen}
+        onClose={() => setIsFaqOpen(false)}
+        defaultTab={faqTab}
+      />
     </div>
   );
 };

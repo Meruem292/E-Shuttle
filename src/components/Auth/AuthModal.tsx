@@ -1,8 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { Eye, EyeOff, Upload, Image as ImageIcon, FileCheck, X, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, Upload, Image as ImageIcon, FileCheck, X, AlertCircle, HelpCircle, Info } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBackHandler } from '../../contexts/NativeBackContext';
 import { useAppLogo } from '../../services/logoService';
+import { FaqAboutModal } from '../Common/FaqAboutModal';
 import scsLogo from '../../images/scs_logo.jpg';
 import cctLogo from '../../images/cct_logo.jpg';
 
@@ -71,6 +72,7 @@ export const AuthModal: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [isFaqOpen, setIsFaqOpen] = useState<boolean>(false);
 
   // Handle Driver's License Picture File Selection & Base64 Data URL Conversion
   const handleLicenseCardUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -529,6 +531,21 @@ export const AuthModal: React.FC = () => {
           </div>
         )}
 
+        {/* FAQs & About Us Quick Access Banner */}
+        <div className="pt-2 border-t border-[#0D47A1]/30">
+          <button
+            type="button"
+            onClick={() => setIsFaqOpen(true)}
+            className="w-full py-2 px-3 bg-[#E3F2FD] hover:bg-[#90CAF9]/50 text-[#0D47A1] border border-[#0D47A1] rounded-2xl text-xs font-black flex items-center justify-center gap-2 transition-all shadow-sm"
+          >
+            <HelpCircle className="w-4 h-4 text-[#0D47A1]" />
+            <span>FAQs, Routes & About Developers</span>
+            <span className="bg-amber-400 text-[#0D47A1] text-[9px] px-1.5 py-0.5 rounded-full font-black">
+              100% FREE
+            </span>
+          </button>
+        </div>
+
         {/* Partner / Institutional Accreditation Footer */}
         <div className="pt-2 border-t border-[#0D47A1]/30 flex items-center justify-center gap-4 opacity-85 hover:opacity-100 transition-opacity">
           <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold">
@@ -556,6 +573,8 @@ export const AuthModal: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <FaqAboutModal isOpen={isFaqOpen} onClose={() => setIsFaqOpen(false)} />
     </div>
   );
 };
