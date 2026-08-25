@@ -1,10 +1,16 @@
 // Service Worker for E-Shuttle PWA
-const CACHE_NAME = 'eshuttle-v1';
+const CACHE_NAME = 'eshuttle-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
   '/official_logo.jpg',
+  '/official_logo.png',
+  '/logo-192.png',
+  '/logo-512.png',
+  '/apple-touch-icon.png',
+  '/favicon-32x32.png',
+  '/favicon-16x16.png',
   '/scs_logo.jpg',
   '/cct_logo.jpg',
   '/icon.svg'
