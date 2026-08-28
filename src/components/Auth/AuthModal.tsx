@@ -3,7 +3,6 @@ import { Eye, EyeOff, Upload, Image as ImageIcon, FileCheck, X, AlertCircle, Hel
 import { useAuth } from '../../contexts/AuthContext';
 import { useBackHandler } from '../../contexts/NativeBackContext';
 import { useAppLogo } from '../../services/logoService';
-import { uploadDriverLicenseToFirebase } from '../../services/firebaseStorageService';
 import { FaqAboutModal } from '../Common/FaqAboutModal';
 import scsLogo from '../../images/scs_logo.jpg';
 import cctLogo from '../../images/cct_logo.jpg';
@@ -75,8 +74,8 @@ export const AuthModal: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [isFaqOpen, setIsFaqOpen] = useState<boolean>(false);
 
-  // Handle Driver's License Picture File Selection & Upload to Firebase Cloud Storage
-  const handleLicenseCardUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle Driver's License Picture File Selection & Base64 Data URL Conversion
+  const handleLicenseCardUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -85,26 +84,25 @@ export const AuthModal: React.FC = () => {
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      setErrorMsg("Image size exceeds 10MB. Please select a smaller photo of your Driver's License.");
+    if (file.size > 8 * 1024 * 1024) {
+      setErrorMsg("Image size exceeds 8MB. Please select a smaller photo of your Driver's License.");
       return;
     }
 
     setLicenseUploading(true);
     setErrorMsg(null);
 
-    try {
-      const res = await uploadDriverLicenseToFirebase(file);
-      if (res.success && res.url) {
-        setDriverLicenseCardUrl(res.url);
-      } else {
-        setErrorMsg(res.error || "Failed to upload Driver's License photo.");
-      }
-    } catch (err: any) {
-      setErrorMsg("Failed to upload Driver's License photo. Please try again.");
-    } finally {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      setDriverLicenseCardUrl(result);
       setLicenseUploading(false);
-    }
+    };
+    reader.onerror = () => {
+      setErrorMsg("Failed to process Driver's License image. Please try again.");
+      setLicenseUploading(false);
+    };
+    reader.readAsDataURL(file);
   };
 
   // Translate Firebase error codes to readable messages
