@@ -75,7 +75,7 @@ import {
   ShieldCheck,
   UserCog,
 } from 'lucide-react';
-import { useAppLogo } from '../../services/logoService';
+import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from '../../services/logoService';
 import { uploadLogoToFirebaseStorage, convertFileToBase64 } from '../../services/firebaseStorageService';
 
 interface AdminDashboardProps {
@@ -787,7 +787,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <img
             src={activeAppLogo}
             onError={(e) => {
-              (e.target as HTMLImageElement).src = '/official_logo.jpg';
+              markLogoUrlAsFailed(activeAppLogo);
+              (e.target as HTMLImageElement).src = officialLogoFallback;
             }}
             alt="E-Shuttle Official Logo"
             className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl object-cover border-2 border-[#0D47A1] shadow-md shrink-0"
@@ -1721,7 +1722,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <img
                   src={activeAppLogo}
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src = '/official_logo.jpg';
+                    markLogoUrlAsFailed(activeAppLogo);
+                    (e.target as HTMLImageElement).src = officialLogoFallback;
                   }}
                   alt="E-Shuttle Active Logo"
                   className="w-full h-full object-contain rounded-xl"

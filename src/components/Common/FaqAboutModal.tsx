@@ -23,7 +23,7 @@ import {
   Search,
 } from 'lucide-react';
 import { useBackHandler } from '../../contexts/NativeBackContext';
-import { useAppLogo } from '../../services/logoService';
+import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from '../../services/logoService';
 import scsLogo from '../../images/scs_logo.jpg';
 import cctLogo from '../../images/cct_logo.jpg';
 
@@ -158,7 +158,8 @@ export const FaqAboutModal: React.FC<FaqAboutModalProps> = ({
             <img
               src={appLogo}
               onError={(e) => {
-                (e.target as HTMLImageElement).src = '/official_logo.jpg';
+                markLogoUrlAsFailed(appLogo);
+                (e.target as HTMLImageElement).src = officialLogoFallback;
               }}
               alt="E-Shuttle Logo"
               className="w-10 h-10 rounded-2xl object-cover border-2 border-white shadow"

@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Eye, EyeOff, Upload, Image as ImageIcon, FileCheck, X, AlertCircle, HelpCircle, Info } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBackHandler } from '../../contexts/NativeBackContext';
-import { useAppLogo } from '../../services/logoService';
+import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from '../../services/logoService';
 import { uploadDriverLicenseToFirebaseStorage } from '../../services/firebaseStorageService';
 import { FaqAboutModal } from '../Common/FaqAboutModal';
 import scsLogo from '../../images/scs_logo.jpg';
@@ -192,7 +192,8 @@ export const AuthModal: React.FC = () => {
               <img
                 src={appLogo}
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = '/official_logo.jpg';
+                  markLogoUrlAsFailed(appLogo);
+                  (e.target as HTMLImageElement).src = officialLogoFallback;
                 }}
                 alt="E-Shuttle Official Logo"
                 className="w-16 h-16 rounded-2xl object-cover shadow-lg border-2 border-[#0D47A1] mx-auto active:scale-90 transition-transform"
@@ -210,7 +211,8 @@ export const AuthModal: React.FC = () => {
               <img
                 src={appLogo}
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = '/official_logo.jpg';
+                  markLogoUrlAsFailed(appLogo);
+                  (e.target as HTMLImageElement).src = officialLogoFallback;
                 }}
                 alt="E-Shuttle Official Logo"
                 className="w-16 h-16 rounded-2xl object-cover shadow-lg border-2 border-[#0D47A1] mx-auto active:scale-90 transition-transform"

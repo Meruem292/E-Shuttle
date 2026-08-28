@@ -1,10 +1,41 @@
 import { useState, useEffect } from 'react';
-import { doc, onSnapshot, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import officialLogoFallback from '../images/official_logo.jpg';
 
 let currentLogoUrl: string | null = null;
 const logoListeners: Array<(url: string | null) => void> = [];
+const failedLogoUrls = new Set<string>();
+
+/**
+ * Validates a logo URL and returns either the valid URL or officialLogoFallback.
+ * Automatically filters out stale/deprecated Supabase URLs or previously failed image URLs.
+ */
+export function getValidLogoUrl(rawUrl: string | null | undefined): string {
+  if (!rawUrl || typeof rawUrl !== 'string') return officialLogoFallback;
+  const trimmed = rawUrl.trim();
+  if (
+    !trimmed ||
+    trimmed.includes('supabase.co') ||
+    failedLogoUrls.has(trimmed)
+  ) {
+    return officialLogoFallback;
+  }
+  return trimmed;
+}
+
+/**
+ * Report an image URL as failed to load so all components immediately update state to fallback.
+ */
+export function markLogoUrlAsFailed(failedUrl: string | null | undefined) {
+  if (!failedUrl || failedUrl === officialLogoFallback) return;
+  const trimmed = failedUrl.trim();
+  failedLogoUrls.add(trimmed);
+  
+  const validUrl = getValidLogoUrl(currentLogoUrl);
+  updateDOMMetaTags(validUrl);
+  logoListeners.forEach((listener) => listener(currentLogoUrl));
+}
 
 function updateDOMMetaTags(logoUrl: string) {
   if (typeof window === 'undefined') return;
@@ -49,11 +80,16 @@ function initLogoListener() {
       doc(db, 'adminSettings', 'default'),
       (snap) => {
         if (snap.exists() && snap.data().appLogoUrl) {
-          currentLogoUrl = snap.data().appLogoUrl;
+          const rawUrl = snap.data().appLogoUrl;
+          if (typeof rawUrl === 'string' && rawUrl.includes('supabase.co')) {
+            currentLogoUrl = null;
+          } else {
+            currentLogoUrl = rawUrl;
+          }
         } else {
           currentLogoUrl = null;
         }
-        const activeUrl = currentLogoUrl || officialLogoFallback;
+        const activeUrl = getValidLogoUrl(currentLogoUrl);
         updateDOMMetaTags(activeUrl);
         logoListeners.forEach((listener) => listener(currentLogoUrl));
       },
@@ -97,10 +133,12 @@ export function useAppLogo(): { logoUrl: string; isCustomLogo: boolean; defaultL
     return () => unsub();
   }, []);
 
-  const logoUrl = customUrl || officialLogoFallback;
+  const validUrl = getValidLogoUrl(customUrl);
+  const isCustomLogo = validUrl !== officialLogoFallback;
+
   return {
-    logoUrl,
-    isCustomLogo: !!customUrl,
+    logoUrl: validUrl,
+    isCustomLogo,
     defaultLogo: officialLogoFallback,
   };
 }

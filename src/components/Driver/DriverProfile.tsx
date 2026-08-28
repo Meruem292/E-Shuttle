@@ -4,7 +4,7 @@ import { LogOut, AlertTriangle, HelpCircle, Info, Bus, ChevronRight } from 'luci
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { PWAInstallButton } from '../PWAInstallPrompt';
-import { useAppLogo } from '../../services/logoService';
+import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from '../../services/logoService';
 import { FaqAboutModal } from '../Common/FaqAboutModal';
 import scsLogo from '../../images/scs_logo.jpg';
 import cctLogo from '../../images/cct_logo.jpg';
@@ -41,7 +41,8 @@ export const DriverProfile: React.FC = () => {
         <img
           src={appLogo}
           onError={(e) => {
-            (e.target as HTMLImageElement).src = '/official_logo.jpg';
+            markLogoUrlAsFailed(appLogo);
+            (e.target as HTMLImageElement).src = officialLogoFallback;
           }}
           alt="E-Shuttle Official Logo"
           className="w-10 h-10 rounded-2xl object-cover border-2 border-[#0D47A1] shadow-md shrink-0"

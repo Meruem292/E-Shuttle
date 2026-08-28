@@ -89,7 +89,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
             <img
               src={officialLogo}
               onError={(e) => {
-                (e.target as HTMLImageElement).src = '/official_logo.jpg';
+                (e.target as HTMLImageElement).src = officialLogo;
               }}
               alt="E-Shuttle Official Logo"
               className="w-9 h-9 rounded-xl object-cover border border-white/30 shrink-0 shadow-md"

@@ -23,7 +23,7 @@ import {
 import { updateEBikeGpsLocation } from '../../services/ebikeService';
 import { doc, updateDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase/config';
-import { useAppLogo } from '../../services/logoService';
+import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from '../../services/logoService';
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
 import { ChatFloatingButton } from '../Common/ChatFloatingButton';
 
@@ -242,7 +242,8 @@ export const DriverHome: React.FC = () => {
             <img
               src={appLogo}
               onError={(e) => {
-                (e.target as HTMLImageElement).src = '/official_logo.jpg';
+                markLogoUrlAsFailed(appLogo);
+                (e.target as HTMLImageElement).src = officialLogoFallback;
               }}
               alt="E-Shuttle Official Logo"
               className="w-7 h-7 rounded-full object-cover border border-[#0D47A1] shrink-0"

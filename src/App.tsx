@@ -12,7 +12,7 @@ import { DriverProfile } from './components/Driver/DriverProfile';
 import { AdminDashboard } from './components/Admin/AdminDashboard';
 import { PWAInstallButton } from './components/PWAInstallPrompt';
 import { ChatFloatingButton } from './components/Common/ChatFloatingButton';
-import { useAppLogo } from './services/logoService';
+import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from './services/logoService';
 
 const MainAppContent: React.FC = () => {
   const { role, currentUser, loading } = useAuth();
@@ -75,7 +75,8 @@ const MainAppContent: React.FC = () => {
           <img
             src={logoUrl}
             onError={(e) => {
-              (e.target as HTMLImageElement).src = '/official_logo.jpg';
+              markLogoUrlAsFailed(logoUrl);
+              (e.target as HTMLImageElement).src = officialLogoFallback;
             }}
             alt="E-Shuttle Official Logo"
             className="w-16 h-16 rounded-2xl object-cover shadow-xl border-2 border-[#0D47A1]"
