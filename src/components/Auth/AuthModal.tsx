@@ -3,6 +3,7 @@ import { Eye, EyeOff, Upload, Image as ImageIcon, FileCheck, X, AlertCircle, Hel
 import { useAuth } from '../../contexts/AuthContext';
 import { useBackHandler } from '../../contexts/NativeBackContext';
 import { useAppLogo } from '../../services/logoService';
+import { uploadDriverLicenseToFirebaseStorage } from '../../services/firebaseStorageService';
 import { FaqAboutModal } from '../Common/FaqAboutModal';
 import scsLogo from '../../images/scs_logo.jpg';
 import cctLogo from '../../images/cct_logo.jpg';
@@ -74,8 +75,8 @@ export const AuthModal: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [isFaqOpen, setIsFaqOpen] = useState<boolean>(false);
 
-  // Handle Driver's License Picture File Selection & Base64 Data URL Conversion
-  const handleLicenseCardUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle Driver's License Picture File Selection & Upload to Firebase Storage
+  const handleLicenseCardUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -92,17 +93,19 @@ export const AuthModal: React.FC = () => {
     setLicenseUploading(true);
     setErrorMsg(null);
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
-      setDriverLicenseCardUrl(result);
-      setLicenseUploading(false);
-    };
-    reader.onerror = () => {
+    try {
+      const uploadRes = await uploadDriverLicenseToFirebaseStorage(file);
+      if (uploadRes.success && uploadRes.url) {
+        setDriverLicenseCardUrl(uploadRes.url);
+      } else {
+        setErrorMsg(uploadRes.error || "Failed to process Driver's License image.");
+      }
+    } catch (err: any) {
+      console.error("License upload error:", err);
       setErrorMsg("Failed to process Driver's License image. Please try again.");
+    } finally {
       setLicenseUploading(false);
-    };
-    reader.readAsDataURL(file);
+    }
   };
 
   // Translate Firebase error codes to readable messages

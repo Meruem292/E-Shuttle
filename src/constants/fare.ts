@@ -6,9 +6,6 @@ export const DEFAULT_FARE_SETTINGS: AdminSettings = {
   minimumFare: 0,
   initialSearchRadiusKm: 5,
   appLogoUrl: '',
-  supabaseUrl: 'https://gjfwrphhhgodjhtgwmum.supabase.co',
-  supabaseAnonKey: '',
-  supabaseBucketName: 'photos',
 };
 
 export function calculateFare(_distanceKm?: number, _settings?: AdminSettings): number {

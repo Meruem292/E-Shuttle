@@ -76,7 +76,7 @@ import {
   UserCog,
 } from 'lucide-react';
 import { useAppLogo } from '../../services/logoService';
-import { uploadLogoToSupabase, convertFileToBase64, getSupabaseClient } from '../../services/supabaseService';
+import { uploadLogoToFirebaseStorage, convertFileToBase64 } from '../../services/firebaseStorageService';
 
 interface AdminDashboardProps {
   activeTab: string;
@@ -228,14 +228,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [settingsSaving, setSettingsSaving] = useState<boolean>(false);
   const [settingsSuccess, setSettingsSuccess] = useState<boolean>(false);
 
-  // Logo & Supabase Upload State
+  // Logo & Firebase Storage Upload State
   const { logoUrl: activeAppLogo, isCustomLogo } = useAppLogo();
   const [logoUploading, setLogoUploading] = useState<boolean>(false);
   const [logoSuccessMsg, setLogoSuccessMsg] = useState<string | null>(null);
   const [logoErrorMsg, setLogoErrorMsg] = useState<string | null>(null);
-  const [showSupabaseKey, setShowSupabaseKey] = useState<boolean>(false);
 
-  // Handle Logo Image Upload (Supabase Storage with Base64 fallback)
+  // Handle Logo Image Upload (Firebase Storage with Base64 fallback)
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -245,29 +244,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setLogoErrorMsg(null);
 
     try {
-      const config = {
-        url: fareSettings.supabaseUrl || import.meta.env.VITE_SUPABASE_URL || 'https://gjfwrphhhgodjhtgwmum.supabase.co',
-        anonKey: fareSettings.supabaseAnonKey || import.meta.env.VITE_SUPABASE_ANON_KEY || '',
-        bucketName: fareSettings.supabaseBucketName || 'photos',
-      };
-
+      const res = await uploadLogoToFirebaseStorage(file);
       let finalLogoUrl = '';
 
-      if (config.url && config.anonKey) {
-        const res = await uploadLogoToSupabase(file, config);
-        if (res.success && res.url) {
-          finalLogoUrl = res.url;
-          setLogoSuccessMsg('Logo uploaded successfully to Supabase Storage!');
+      if (res.success && res.url) {
+        finalLogoUrl = res.url;
+        if (res.storageType === 'firebase') {
+          setLogoSuccessMsg('Logo uploaded successfully to Firebase Storage!');
         } else {
-          console.warn('Supabase upload warning, falling back to Base64:', res.error);
-          const base64Url = await convertFileToBase64(file);
-          finalLogoUrl = base64Url;
-          setLogoSuccessMsg(`Logo uploaded! (${res.error || 'Saved directly'})`);
+          setLogoSuccessMsg('Logo uploaded and saved successfully!');
         }
       } else {
-        const base64Url = await convertFileToBase64(file);
-        finalLogoUrl = base64Url;
-        setLogoSuccessMsg('Logo uploaded and saved to settings! (Configure Supabase credentials below for Cloud Storage hosting)');
+        setLogoErrorMsg(res.error || 'Failed to upload logo image.');
+        return;
       }
 
       const updatedSettings = {
@@ -1783,7 +1772,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
               
               <p className="text-[10px] text-slate-400 italic">
-                Supported formats: PNG, JPG, WEBP, SVG (Max 5MB). Automatically uploads to Supabase Storage if configured below.
+                Supported formats: PNG, JPG, WEBP, SVG (Max 5MB). Automatically uploads to Firebase Storage cloud bucket with fallback.
               </p>
             </div>
 
@@ -2025,7 +2014,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             {settingsSuccess && (
               <div className="p-2.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold text-center animate-in fade-in">
-                Shuttle settings and Supabase configuration saved successfully!
+                Shuttle settings and media storage configuration saved successfully!
               </div>
             )}
 

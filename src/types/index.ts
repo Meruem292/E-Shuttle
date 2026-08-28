@@ -134,9 +134,7 @@ export interface AdminSettings {
   minimumFare: number;
   initialSearchRadiusKm: number;
   appLogoUrl?: string;
-  supabaseUrl?: string;
-  supabaseAnonKey?: string;
-  supabaseBucketName?: string;
+  mediaStorageBucket?: string;
   updatedAt?: any;
 }
 
