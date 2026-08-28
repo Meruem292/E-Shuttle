@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 
 const env = (import.meta as unknown as { env: Record<string, string> }).env || {};
 
@@ -8,7 +9,7 @@ const firebaseConfig = {
   apiKey: env.VITE_FIREBASE_API_KEY || 'YOUR_FIREBASE_API_KEY',
   authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || 'YOUR_PROJECT_ID.firebaseapp.com',
   projectId: env.VITE_FIREBASE_PROJECT_ID || 'YOUR_PROJECT_ID',
-  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || 'YOUR_PROJECT_ID.appspot.com',
+  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || 'YOUR_PROJECT_ID.firebasestorage.app',
   messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || 'YOUR_MESSAGING_SENDER_ID',
   appId: env.VITE_FIREBASE_APP_ID || 'YOUR_APP_ID',
 };
@@ -19,6 +20,7 @@ const databaseId = rawDbId && rawDbId !== '(default)' ? rawDbId : undefined;
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = databaseId ? getFirestore(app, databaseId) : getFirestore(app);
+const storage = getStorage(app);
 
 export enum OperationType {
   CREATE = 'create',
@@ -67,4 +69,4 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-export { app, auth, db };
+export { app, auth, db, storage };

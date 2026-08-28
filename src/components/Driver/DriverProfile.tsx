@@ -5,6 +5,7 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { PWAInstallButton } from '../PWAInstallPrompt';
 import { useAppLogo } from '../../services/logoService';
+import { uploadDriverLicenseToFirebase } from '../../services/firebaseStorageService';
 import { FaqAboutModal } from '../Common/FaqAboutModal';
 import scsLogo from '../../images/scs_logo.jpg';
 import cctLogo from '../../images/cct_logo.jpg';
@@ -176,14 +177,12 @@ export const DriverProfile: React.FC = () => {
                 onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (!file || !currentUser) return;
-                  const reader = new FileReader();
-                  reader.onload = async (ev) => {
-                    const dataUrl = ev.target?.result as string;
+                  const res = await uploadDriverLicenseToFirebase(file, currentUser.uid);
+                  if (res.success && res.url) {
                     await updateDoc(doc(db, 'drivers', currentUser.uid), {
-                      driverLicenseCardUrl: dataUrl,
+                      driverLicenseCardUrl: res.url,
                     });
-                  };
-                  reader.readAsDataURL(file);
+                  }
                 }}
               />
             </label>
