@@ -723,7 +723,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         return {
           title: 'Admin Control Panel',
           badge: 'OVERVIEW',
-          subtitle: 'Real-time fleet status, revenue KPIs, and active shuttle dispatch',
+          subtitle: 'Real-time e-shuttle monitoring, pickup alerts, and trip management',
         };
       case 'users':
       case 'customers':
