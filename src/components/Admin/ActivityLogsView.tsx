@@ -238,7 +238,7 @@ export const ActivityLogsView: React.FC<ActivityLogsViewProps> = ({ onOpenTutori
             <Activity className="w-4 h-4 text-blue-600" />
           </div>
           <div className="text-2xl font-black text-blue-700">{stats.updates}</div>
-          <p className="text-[10px] text-blue-600 font-medium">Edits, status, fares</p>
+          <p className="text-[10px] text-blue-600 font-medium">Edits, status, settings</p>
         </div>
 
         <div className="bg-white border-2 border-rose-500 rounded-2xl p-4 space-y-1 shadow-md">

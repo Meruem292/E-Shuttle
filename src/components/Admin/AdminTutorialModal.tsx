@@ -67,8 +67,8 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
   const [cheatQuery, setCheatQuery] = useState<string>('');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  // Simulation state for Backtracking interactive demo
-  const [simulatedFare, setSimulatedFare] = useState<number>(15);
+  // Simulation state for Backtracking interactive demo (Dispatch Radius & Operational Settings)
+  const [simulatedRadius, setSimulatedRadius] = useState<number>(5);
   const [simulatedHistory, setSimulatedHistory] = useState<
     { id: string; timestamp: string; action: string; before: any; after: any; summary: string }[]
   >([
@@ -76,9 +76,9 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
       id: 'log-demo-01',
       timestamp: '2026-09-03 08:30:12',
       action: 'UPDATE',
-      summary: 'Updated base fare parameter from ₱12 to ₱15',
-      before: { baseFare: 12, perKmRate: 2.5 },
-      after: { baseFare: 15, perKmRate: 2.5 },
+      summary: 'Updated Driver Search Radius parameter from 5 km to 8 km',
+      before: { initialSearchRadiusKm: 5, isFreeShuttle: true },
+      after: { initialSearchRadiusKm: 8, isFreeShuttle: true },
     },
     {
       id: 'log-demo-02',
@@ -125,7 +125,7 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
         'View live passenger boarding requests and dispatch status.',
       ],
       explanation:
-        'As an administrator, the Executive Dashboard serves as your central command center. You can see real-time movement, battery levels, driver shifts, and incoming ride requests across the entire City of Tagbilaran coverage area.',
+        'As an administrator, the Executive Dashboard serves as your central command center. You can see real-time vehicle movements, driver shifts, station passenger queues, and incoming ride requests across the entire City of Tagbilaran coverage area.',
       actionGuide: [
         {
           stepNumber: 1,
@@ -243,17 +243,17 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
       targetTab: 'ebikes',
       targetTabLabel: 'Manage E-Bikes & Hardware',
       objectives: [
-        'Register electric shuttles with plate numbers, hardware IDs, and battery ratings.',
+        'Register electric shuttles with plate numbers, hardware unit IDs, and model details.',
         'Pair physical RFID cards to authorized drivers for tap-in/tap-out shift authentication.',
-        'Monitor battery health, maintenance status, and vehicle telemetry.',
+        'Monitor operational readiness, route dispatch status, and maintenance history.',
       ],
       explanation:
-        'The Tagbilaran E-Shuttle network features physical contactless RFID cards for driver shift validation, vehicle ignition unlock, and passenger tap-to-ride payment.',
+        'The Tagbilaran E-Shuttle network features physical contactless RFID cards for driver shift validation, vehicle ignition unlock, and quick boarding verification.',
       actionGuide: [
         {
           stepNumber: 1,
           title: 'Register Vehicle',
-          description: 'Add the e-shuttle unit ID, vehicle plate, and current battery charge percentage.',
+          description: 'Add the e-shuttle unit ID, vehicle plate number, model, and initial operational status (Available).',
         },
         {
           stepNumber: 2,
@@ -369,7 +369,7 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
         'Export audit trails to CSV or JSON for compliance and reporting.',
       ],
       explanation:
-        'The Activity Logs system acts as the immutable flight recorder of the entire transit platform. If a station was moved, a driver was suspended, a zone boundary was altered, or fare rates were changed, you can pinpoint exactly WHO did it, WHEN it happened, and WHAT the previous state was.',
+        'The Activity Logs system acts as the immutable flight recorder of the entire transit platform. If a station was moved, a driver was suspended, a zone boundary was altered, or dispatch parameters were changed, you can pinpoint exactly WHO did it, WHEN it happened, and WHAT the previous state was.',
       actionGuide: [
         {
           stepNumber: 1,
@@ -402,42 +402,42 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
     {
       id: 'step-settings',
       category: 'Policy',
-      title: 'Fare Policies & System Configuration',
-      subtitle: 'Configure municipal fare algorithms, service radii, and branding',
+      title: 'Shuttle Dispatch Radius & Policies (100% Free Public Shuttle)',
+      subtitle: 'Configure driver search radius, maximum service area, and municipal branding',
       badge: 'Step 8 of 8',
       badgeColor: 'bg-slate-100 text-slate-800 border-slate-300',
       icon: <Sliders className="w-5 h-5 text-slate-700" />,
       targetTab: 'settings',
       targetTabLabel: 'Open System Settings',
       objectives: [
-        'Set base fare (₱), per-kilometer rate, and student/senior discount policies.',
-        'Configure the maximum dispatch service radius (km).',
-        'Update municipal program branding, logo assets, and admin security credentials.',
+        'Verify 100% Free Public Transit policy (zero fares, no ticketing, no passenger payment collection).',
+        'Configure the nearby driver search radius (km) and maximum operational service radius (km).',
+        'Update municipal program branding, official logo assets, and admin security credentials.',
       ],
       explanation:
-        'All automated trip fare calculations are determined by the parameters defined in System Settings. Adjustments apply dynamically across all passenger apps and driver meters.',
+        'The Tagbilaran City E-Shuttle is a 100% FREE public transit service. There are zero fares, fees, or passenger charges. System Settings allows administrators to configure the driver search radius (the distance in km within which ride requests ping nearby drivers) and operational boundaries.',
       actionGuide: [
         {
           stepNumber: 1,
-          title: 'Set Fare Parameters',
-          description: 'Input the official base fare (e.g. ₱15.00) and the per-kilometer increment (e.g. ₱2.50/km).',
+          title: 'Verify Free Shuttle Policy',
+          description: 'Confirm the public transit policy notice confirming zero fare collection across all operational routes.',
         },
         {
           stepNumber: 2,
-          title: 'Set Operating Radius',
-          description: 'Define the maximum distance (e.g. 15 km) from city center within which rides can be dispatched.',
+          title: 'Set Driver Search Radius',
+          description: 'Define the maximum pickup search distance (e.g., 5 km) to alert active drivers when passengers hail a ride.',
         },
         {
           stepNumber: 3,
-          title: 'Save & Commit',
-          description: 'Click "Save Changes". The update is automatically logged in the audit trail with the before and after fare values.',
+          title: 'Save All Settings',
+          description: 'Click "Save All Settings & Secrets". The update is logged in the audit trail with before and after parameters for complete accountability.',
         },
       ],
       proTips: [
-        'Always review the Activity Log after modifying fare rates to verify that your changes took effect correctly.',
+        'Maintain a balanced search radius (3–6 km) to ensure quick response times while preventing drivers from being hailed from excessive distances.',
       ],
       backtrackingRelevance:
-        'Fare updates generate a SETTINGS_UPDATE audit log capturing previous vs. new base fares and kilometer rates.',
+        'Settings updates generate a SETTINGS_UPDATE audit log capturing previous vs. new operational search radii.',
     },
   ];
 
@@ -511,15 +511,16 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
       targetTab: 'incidents',
     },
     {
-      title: 'How do I change fare rates and verify the change?',
-      category: 'Fares & Settings',
+      title: 'How do I adjust the driver search radius and verify in audit logs?',
+      category: 'Dispatch & Settings',
       steps: [
-        'Go to System Settings (gear icon).',
-        'Edit the "Base Fare" and "Per Kilometer Rate".',
-        'Click "Save Settings".',
-        'Switch to "Audit Logs" to inspect the SETTINGS_UPDATE log and verify previous vs new fare rates.',
+        'Go to System Settings (gear icon or Config tab).',
+        'Verify the 100% Free Public Shuttle policy banner (zero passenger fares).',
+        'Adjust the "Driver Search Radius (km)" (e.g. set to 5 km).',
+        'Click "Save All Settings & Secrets".',
+        'Switch to "Activity Logs" to inspect the SETTINGS_UPDATE record capturing previous vs new search radius.',
       ],
-      logRecord: 'SETTINGS_UPDATE log captures old and new fare parameter matrices.',
+      logRecord: 'SETTINGS_UPDATE log captures old and new operational dispatch radii.',
       targetTab: 'settings',
     },
   ];
@@ -531,17 +532,17 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
       c.steps.some((s) => s.toLowerCase().includes(cheatQuery.toLowerCase()))
   );
 
-  const handleSimulateFareChange = () => {
-    const nextFare = simulatedFare + 2;
+  const handleSimulateRadiusChange = () => {
+    const nextRadius = simulatedRadius >= 10 ? 3 : simulatedRadius + 2;
     const newLog = {
       id: `log-demo-${Date.now().toString().slice(-4)}`,
       timestamp: new Date().toISOString().replace('T', ' ').slice(0, 19),
       action: 'SETTINGS_UPDATE',
-      summary: `Admin modified Base Fare parameter from ₱${simulatedFare} to ₱${nextFare}`,
-      before: { baseFare: simulatedFare, perKmRate: 2.5 },
-      after: { baseFare: nextFare, perKmRate: 2.5 },
+      summary: `Admin modified Driver Search Radius parameter from ${simulatedRadius} km to ${nextRadius} km`,
+      before: { initialSearchRadiusKm: simulatedRadius, isFreeShuttle: true },
+      after: { initialSearchRadiusKm: nextRadius, isFreeShuttle: true },
     };
-    setSimulatedFare(nextFare);
+    setSimulatedRadius(nextRadius);
     setSimulatedHistory([newLog, ...simulatedHistory]);
   };
 
@@ -792,7 +793,7 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
                 </div>
 
                 <p className="text-xs sm:text-sm text-slate-700 leading-relaxed font-medium">
-                  <strong>What is Backtracking?</strong> When team members or automated systems create, edit, or delete stations, zones, drivers, or fare matrices, human mistakes can happen (e.g., setting a fare to ₱150 instead of ₱15, or moving a station coordinate by accident).
+                  <strong>What is Backtracking?</strong> When team members or automated systems create, edit, or delete stations, zones, drivers, or system settings, human mistakes can happen (e.g., setting a search radius to 50 km instead of 5 km, or moving a station coordinate by accident).
                   The <strong>Activity Logs & Backtracking Engine</strong> records an immutable snapshot of the <strong>BEFORE (State Prior)</strong> and <strong>AFTER (Applied State)</strong> at the exact millisecond of change.
                 </p>
 
@@ -832,11 +833,11 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
                   </div>
 
                   <button
-                    onClick={handleSimulateFareChange}
+                    onClick={handleSimulateRadiusChange}
                     className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-900 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-sm active:scale-95 shrink-0"
                   >
                     <Sliders className="w-3.5 h-3.5" />
-                    <span>Simulate Fare Rate Change (Current: ₱{simulatedFare})</span>
+                    <span>Simulate Radius Change (Current: {simulatedRadius} km)</span>
                   </button>
                 </div>
 
@@ -872,11 +873,11 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
                         {/* Side by Side Mini Diff */}
                         <div className="flex items-center gap-2 text-[11px] font-mono bg-white p-2 rounded-lg border border-slate-200 shrink-0">
                           <span className="text-rose-600 font-bold">
-                            Before: ₱{sim.before.baseFare ?? 'N/A'}
+                            Before: {sim.before.initialSearchRadiusKm !== undefined ? `${sim.before.initialSearchRadiusKm} km` : sim.before.accountStatus ?? 'N/A'}
                           </span>
                           <ArrowRight className="w-3 h-3 text-slate-400" />
                           <span className="text-emerald-600 font-bold">
-                            After: ₱{sim.after.baseFare ?? 'N/A'}
+                            After: {sim.after.initialSearchRadiusKm !== undefined ? `${sim.after.initialSearchRadiusKm} km` : sim.after.accountStatus ?? 'N/A'}
                           </span>
                         </div>
                       </div>

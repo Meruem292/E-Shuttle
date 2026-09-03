@@ -674,14 +674,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       logActivity({
         action: 'SETTINGS_UPDATE',
-        actionLabel: 'Updated Fare & System Settings',
+        actionLabel: 'Updated Shuttle Dispatch Settings',
         entityType: 'SETTINGS',
         entityId: 'default',
-        entityName: 'Fare & Operational Policy',
-        summary: `Admin updated fare parameters (Base: ₱${fareSettings.baseFare}, Per Km: ₱${fareSettings.perKmRate}, Max Radius: ${fareSettings.maxServiceRadiusKm}km)`,
+        entityName: 'Operational Policy & Dispatch Settings',
+        summary: `Admin updated operational parameters (Search Radius: ${fareSettings.initialSearchRadiusKm}km, Max Radius: ${fareSettings.maxServiceRadiusKm}km) - Free Shuttle Policy`,
         details: {
-          summary: `Operational dispatch fare configuration updated`,
-          after: fareSettings,
+          summary: `Operational dispatch configuration updated (100% Free Public Shuttle)`,
+          after: {
+            initialSearchRadiusKm: fareSettings.initialSearchRadiusKm,
+            maxServiceRadiusKm: fareSettings.maxServiceRadiusKm,
+            isFreeShuttle: true,
+          },
         },
         severity: 'info',
       }).catch(() => {});
@@ -841,7 +845,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         return {
           title: 'E-Shuttle Fleet & Telemetry',
           badge: 'FLEET',
-          subtitle: 'Monitor vehicle status, battery levels, maintenance, and GPS tracking',
+          subtitle: 'Monitor vehicle status, operational readiness, maintenance, and GPS tracking',
         };
       case 'incidents':
         return {
@@ -853,7 +857,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         return {
           title: 'Dispatch System Settings',
           badge: 'CONFIG',
-          subtitle: 'Configure pricing, system defaults, fare rules, and operational parameters',
+          subtitle: 'Configure driver search radius, system defaults, and operational parameters (Free Public Shuttle)',
         };
       default:
         return {

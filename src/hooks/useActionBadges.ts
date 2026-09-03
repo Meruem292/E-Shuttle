@@ -213,14 +213,14 @@ export function useActionBadges(currentUser: UserProfile | null, role: UserRole 
         }
       );
 
-      // Admin Shuttles Telemetry & Low Battery Listener
+      // Admin Shuttles Telemetry & Maintenance Listener
       unsubAdminEbikes = onSnapshot(
         collection(db, 'ebikes'),
         (snapshot) => {
           let hasShuttleAlert = false;
           snapshot.forEach((docSnap) => {
             const data = docSnap.data();
-            if ((data.batteryLevel !== undefined && data.batteryLevel < 20) || data.status === 'MAINTENANCE') {
+            if (data.status === 'MAINTENANCE') {
               hasShuttleAlert = true;
             }
           });
