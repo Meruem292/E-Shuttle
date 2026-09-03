@@ -105,11 +105,10 @@ export const AdminEBikeMap: React.FC<AdminEBikeMapProps> = ({
         zoomControl: false,
       });
 
-      // Carto Voyager Light Tile Layer
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+      // OpenStreetMap Standard Tile Layer (No API Key Required)
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 19,
-        subdomains: 'abcd',
       }).addTo(map);
 
       stationsGroupRef.current = L.layerGroup().addTo(map);

@@ -42,10 +42,9 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
         zoomControl: true,
       });
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap contributors',
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 19,
-        subdomains: 'abcd',
       }).addTo(map);
 
       // Custom Draggable Pin Icon

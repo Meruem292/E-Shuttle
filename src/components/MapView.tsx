@@ -111,11 +111,10 @@ export const MapView: React.FC<MapViewProps> = ({
         zoomControl: false,
       });
 
-      // Clean, high-resolution light Carto Voyager tiles
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+      // Standard OpenStreetMap tiles (No API Key Required)
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 19,
-        subdomains: 'abcd',
       }).addTo(map);
 
       // Map click handler for interactive location picking
