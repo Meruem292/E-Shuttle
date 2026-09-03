@@ -15,6 +15,7 @@ import {
 import { db } from '../firebase/config';
 import { OperationalZone } from '../types';
 import { calculateDistanceKm } from '../constants/fare';
+import { logActivity } from './activityLogService';
 
 export const ZONES_COLLECTION = 'operational_zones';
 const LOCAL_STORAGE_ZONES_KEY = 'eshuttle_operational_zones_cache';
@@ -162,6 +163,21 @@ export async function addOperationalZone(
   saveLocalZones([...filteredList, fullZone]);
   notifyLocalZoneSubscribers();
 
+  // Audit log creation
+  logActivity({
+    action: 'CREATE',
+    actionLabel: 'Created Service Zone',
+    entityType: 'ZONE',
+    entityId: assignedId,
+    entityName: newZoneData.name,
+    summary: `Created geofence service zone "${newZoneData.name}" with radius ${newZoneData.radiusMeters}m`,
+    details: {
+      summary: `Zone registered with boundary center [${newZoneData.centerLatitude}, ${newZoneData.centerLongitude}]`,
+      after: newZoneData,
+    },
+    severity: 'success',
+  }).catch(() => {});
+
   return assignedId;
 }
 
@@ -172,6 +188,9 @@ export async function updateOperationalZone(
   id: string,
   updates: Partial<OperationalZone>
 ): Promise<void> {
+  const localList = getLocalZones();
+  const existing = localList.find((z) => z.id === id);
+
   try {
     const zoneRef = doc(db, ZONES_COLLECTION, id);
     await updateDoc(zoneRef, {
@@ -182,16 +201,34 @@ export async function updateOperationalZone(
     console.warn('Firestore updateDoc zone fallback to local cache:', err);
   }
 
-  const localList = getLocalZones();
   const updatedList = localList.map((z) => (z.id === id ? { ...z, ...updates } : z));
   saveLocalZones(updatedList);
   notifyLocalZoneSubscribers();
+
+  // Audit log update
+  logActivity({
+    action: 'UPDATE',
+    actionLabel: 'Updated Service Zone',
+    entityType: 'ZONE',
+    entityId: id,
+    entityName: updates.name || existing?.name || id,
+    summary: `Updated geofence zone "${updates.name || existing?.name || id}"`,
+    details: {
+      summary: `Zone attributes updated: ${Object.keys(updates).join(', ')}`,
+      before: existing ? { ...existing } : null,
+      after: updates,
+    },
+    severity: 'info',
+  }).catch(() => {});
 }
 
 /**
  * Delete an operational zone
  */
 export async function deleteOperationalZone(id: string): Promise<void> {
+  const localList = getLocalZones();
+  const existing = localList.find((z) => z.id === id);
+
   try {
     const zoneRef = doc(db, ZONES_COLLECTION, id);
     await deleteDoc(zoneRef);
@@ -199,10 +236,24 @@ export async function deleteOperationalZone(id: string): Promise<void> {
     console.warn('Firestore deleteDoc zone fallback to local cache:', err);
   }
 
-  const localList = getLocalZones();
   const filtered = localList.filter((z) => z.id !== id);
   saveLocalZones(filtered);
   notifyLocalZoneSubscribers();
+
+  // Audit log deletion
+  logActivity({
+    action: 'DELETE',
+    actionLabel: 'Deleted Service Zone',
+    entityType: 'ZONE',
+    entityId: id,
+    entityName: existing?.name || id,
+    summary: `Deleted geofence service zone "${existing?.name || id}"`,
+    details: {
+      summary: `Geofence zone deleted from system`,
+      before: existing ? { ...existing } : null,
+    },
+    severity: 'danger',
+  }).catch(() => {});
 }
 
 import { ShuttleStation } from '../types';

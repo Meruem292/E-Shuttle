@@ -26,6 +26,7 @@ import {
 } from '../types';
 import { calculateDistanceKm } from '../constants/fare';
 import { checkLocationWithinStationArea, getShuttleStations } from './stationService';
+import { logActivity } from './activityLogService';
 
 // 1. Create new booking (with active booking and station proximity validation for pickup & drop-off)
 export async function createBooking(
@@ -124,6 +125,32 @@ export async function createBooking(
   };
 
   const docRef = await addDoc(collection(db, 'bookings'), bookingData);
+
+  // Audit log ride request creation
+  logActivity({
+    action: 'CREATE',
+    actionLabel: 'Requested Ride',
+    entityType: 'RIDE',
+    entityId: docRef.id,
+    entityName: `Ride #${docRef.id.slice(-6).toUpperCase()}`,
+    summary: `Passenger "${customerName}" requested ride from "${pickup.address}" to "${destination.address}" (Fare: ₱${estimatedFare})`,
+    details: {
+      summary: `Booking created: ${distanceKm} km, ~${estimatedDurationMinutes} mins`,
+      after: {
+        bookingId: docRef.id,
+        customerId,
+        customerName,
+        pickup: pickup.address,
+        destination: destination.address,
+        distanceKm,
+        estimatedFare,
+        zoneName,
+      },
+    },
+    performedBy: { uid: customerId, name: customerName, role: 'customer' },
+    severity: 'info',
+  }).catch(() => {});
+
   return docRef.id;
 }
 
@@ -181,6 +208,28 @@ export async function acceptBookingAtomic(
       updatedAt: serverTimestamp(),
     });
   });
+
+  // Audit log driver dispatch acceptance
+  logActivity({
+    action: 'STATUS_CHANGE',
+    actionLabel: 'Driver Accepted Ride',
+    entityType: 'RIDE',
+    entityId: bookingId,
+    entityName: `Ride #${bookingId.slice(-6).toUpperCase()}`,
+    summary: `Driver "${driver.fullName}" accepted dispatch for ride #${bookingId.slice(-6).toUpperCase()}`,
+    details: {
+      summary: `Booking assigned to driver ${driver.fullName}`,
+      after: {
+        bookingId,
+        driverId: driver.uid,
+        driverName: driver.fullName,
+        driverVehicleInfo: driver.vehicleInfo,
+        status: 'DRIVER_ASSIGNED',
+      },
+    },
+    performedBy: { uid: driver.uid, name: driver.fullName, role: 'driver' },
+    severity: 'info',
+  }).catch(() => {});
 }
 
 // 3. Update booking status state machine
@@ -209,6 +258,21 @@ export async function updateBookingStatus(
   }
 
   await updateDoc(bookingRef, updatePayload);
+
+  // Audit log status transition
+  logActivity({
+    action: 'STATUS_CHANGE',
+    actionLabel: `Ride ${newStatus.replace('_', ' ')}`,
+    entityType: 'RIDE',
+    entityId: bookingId,
+    entityName: `Ride #${bookingId.slice(-6).toUpperCase()}`,
+    summary: `Ride #${bookingId.slice(-6).toUpperCase()} status changed to ${newStatus}`,
+    details: {
+      summary: `Trip progress milestone reached`,
+      after: { bookingId, status: newStatus, driverId: driverId || null },
+    },
+    severity: newStatus === 'COMPLETED' ? 'success' : newStatus === 'CANCELLED' ? 'danger' : 'info',
+  }).catch(() => {});
 
   // Handle completion or cancellation driver state cleanup
   if (newStatus === 'COMPLETED' || newStatus === 'CANCELLED') {
@@ -321,6 +385,22 @@ export async function submitRideRating(
       totalRides: count,
     });
   }
+
+  // Audit log rating submission
+  logActivity({
+    action: 'UPDATE',
+    actionLabel: 'Submitted Ride Review',
+    entityType: 'RIDE',
+    entityId: bookingId,
+    entityName: `Ride #${bookingId.slice(-6).toUpperCase()}`,
+    summary: `Passenger rated ride #${bookingId.slice(-6).toUpperCase()} ${rating}★${comment ? ` - "${comment}"` : ''}`,
+    details: {
+      summary: `Customer feedback recorded for driver ${driverId}`,
+      after: { rating, comment, bookingId, driverId },
+    },
+    performedBy: { uid: customerId, role: 'customer' },
+    severity: 'info',
+  }).catch(() => {});
 }
 
 // 6. Listeners

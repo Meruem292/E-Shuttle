@@ -24,6 +24,7 @@ import { auth, db } from '../firebase/config';
 import { UserProfile, DriverProfile, UserRole, AccountStatus, EBikeDevice } from '../types';
 import { subscribeToEBikes, autoResolveRfidAssignment } from '../services/ebikeService';
 import { sanitizeVehicleInfo } from '../utils/sanitizeVehicle';
+import { logActivity } from '../services/activityLogService';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -293,7 +294,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signIn = async (emailOrUsername: string, pass: string) => {
     setLoading(true);
     const resolvedEmail = await resolveEmailFromIdentifier(emailOrUsername);
-    await signInWithEmailAndPassword(auth, resolvedEmail, pass);
+    const res = await signInWithEmailAndPassword(auth, resolvedEmail, pass);
+    logActivity({
+      action: 'AUTH_LOGIN',
+      actionLabel: 'User Signed In',
+      entityType: 'AUTH',
+      entityId: res.user.uid,
+      entityName: resolvedEmail,
+      summary: `User "${resolvedEmail}" logged into system`,
+      performedBy: { uid: res.user.uid, name: res.user.displayName || resolvedEmail, email: resolvedEmail },
+      severity: 'info',
+    }).catch(() => {});
   };
 
   const signInAdmin = async (emailOrUsername: string, pass: string) => {
@@ -331,6 +342,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUserProfile(adminDoc);
         setRole('admin');
       }
+
+      logActivity({
+        action: 'AUTH_LOGIN',
+        actionLabel: 'Admin Signed In',
+        entityType: 'AUTH',
+        entityId: res.user.uid,
+        entityName: resolvedEmail,
+        summary: `Administrator "${resolvedEmail}" authenticated into Admin Console`,
+        performedBy: { uid: res.user.uid, name: 'Platform Administrator', email: resolvedEmail, role: 'admin' },
+        severity: 'info',
+      }).catch(() => {});
     } catch (err) {
       setUserProfile(null);
       setDriverProfile(null);
@@ -363,6 +385,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUserProfile(userDoc);
     setRole('customer');
     setLoading(false);
+
+    logActivity({
+      action: 'AUTH_REGISTER',
+      actionLabel: 'Registered Passenger Account',
+      entityType: 'USER',
+      entityId: res.user.uid,
+      entityName: fullName,
+      summary: `New passenger registered: "${fullName}" (${email})`,
+      details: {
+        summary: `Customer registered account with phone ${phone}`,
+        after: { uid: res.user.uid, fullName, email, phone, role: 'customer' },
+      },
+      performedBy: { uid: res.user.uid, name: fullName, email, role: 'customer' },
+      severity: 'success',
+    }).catch(() => {});
   };
 
   const signUpDriver = async (
@@ -409,6 +446,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setDriverProfile(driverDoc);
     setRole('driver');
     setLoading(false);
+
+    logActivity({
+      action: 'AUTH_REGISTER',
+      actionLabel: 'Applied as Driver',
+      entityType: 'DRIVER',
+      entityId: res.user.uid,
+      entityName: fullName,
+      summary: `New driver registered application: "${fullName}" (${email}) - Pending Admin Verification`,
+      details: {
+        summary: `Driver application submitted with license ${driverLicenseNumber || 'N/A'}`,
+        after: { uid: res.user.uid, fullName, email, phone, role: 'driver', accountStatus: 'PENDING' },
+      },
+      performedBy: { uid: res.user.uid, name: fullName, email, role: 'driver' },
+      severity: 'warning',
+    }).catch(() => {});
   };
 
   const resetPassword = async (email: string) => {
@@ -416,12 +468,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
+    const prevUser = currentUser;
+    const prevProfile = userProfile || driverProfile;
     setLoading(true);
     await firebaseSignOut(auth);
     setUserProfile(null);
     setDriverProfile(null);
     setRole(null);
     setLoading(false);
+
+    if (prevUser) {
+      logActivity({
+        action: 'AUTH_LOGOUT',
+        actionLabel: 'User Signed Out',
+        entityType: 'AUTH',
+        entityId: prevUser.uid,
+        entityName: prevProfile?.fullName || prevUser.email || prevUser.uid,
+        summary: `User "${prevProfile?.fullName || prevUser.email || prevUser.uid}" signed out of session`,
+        performedBy: { uid: prevUser.uid, name: prevProfile?.fullName || 'User', email: prevUser.email || undefined },
+        severity: 'info',
+      }).catch(() => {});
+    }
   };
 
   const refreshProfile = async () => {

@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { ShuttleStation } from '../types';
+import { logActivity } from './activityLogService';
 
 export const STATIONS_COLLECTION = 'shuttleStations';
 export const DEFAULT_STATION_RADIUS_METERS = 100; // 100m catchment / tagging radius from station pins
@@ -270,6 +271,21 @@ export async function addShuttleStation(
   saveLocalStations([...filteredList, fullStation]);
   notifyLocalSubscribers();
 
+  // Audit log creation
+  logActivity({
+    action: 'CREATE',
+    actionLabel: 'Created Station Pin',
+    entityType: 'STATION',
+    entityId: assignedId,
+    entityName: newStationData.name,
+    summary: `Created designated shuttle station "${newStationData.name}" (${newStationData.allowedType}) with ${newStationData.radiusMeters}m geofence`,
+    details: {
+      summary: `Designated shuttle station added at coordinates [${newStationData.latitude}, ${newStationData.longitude}]`,
+      after: newStationData,
+    },
+    severity: 'success',
+  }).catch(() => {});
+
   return assignedId;
 }
 
@@ -280,6 +296,9 @@ export async function updateShuttleStation(
   id: string,
   updates: Partial<ShuttleStation>
 ): Promise<void> {
+  const localList = getLocalStations();
+  const existing = localList.find((st) => st.id === id);
+
   try {
     const stationRef = doc(db, STATIONS_COLLECTION, id);
     await updateDoc(stationRef, {
@@ -291,16 +310,34 @@ export async function updateShuttleStation(
   }
 
   // Update local cache & notify
-  const localList = getLocalStations();
   const updatedList = localList.map((st) => (st.id === id ? { ...st, ...updates } : st));
   saveLocalStations(updatedList);
   notifyLocalSubscribers();
+
+  // Audit log update
+  logActivity({
+    action: 'UPDATE',
+    actionLabel: 'Updated Station',
+    entityType: 'STATION',
+    entityId: id,
+    entityName: updates.name || existing?.name || id,
+    summary: `Updated shuttle station "${updates.name || existing?.name || id}" attributes`,
+    details: {
+      summary: `Station modified with fields: ${Object.keys(updates).join(', ')}`,
+      before: existing ? { ...existing } : null,
+      after: updates,
+    },
+    severity: 'info',
+  }).catch(() => {});
 }
 
 /**
  * Delete a designated shuttle station
  */
 export async function deleteShuttleStation(id: string): Promise<void> {
+  const localList = getLocalStations();
+  const existing = localList.find((st) => st.id === id);
+
   try {
     const stationRef = doc(db, STATIONS_COLLECTION, id);
     await deleteDoc(stationRef);
@@ -309,10 +346,24 @@ export async function deleteShuttleStation(id: string): Promise<void> {
   }
 
   // Always update local cache & notify subscribers so UI immediately removes the pin
-  const localList = getLocalStations();
   const filtered = localList.filter((st) => st.id !== id);
   saveLocalStations(filtered);
   notifyLocalSubscribers();
+
+  // Audit log deletion
+  logActivity({
+    action: 'DELETE',
+    actionLabel: 'Deleted Station Pin',
+    entityType: 'STATION',
+    entityId: id,
+    entityName: existing?.name || id,
+    summary: `Deleted shuttle station pin "${existing?.name || id}"`,
+    details: {
+      summary: `Station deleted from system`,
+      before: existing ? { ...existing } : null,
+    },
+    severity: 'danger',
+  }).catch(() => {});
 }
 
 /**

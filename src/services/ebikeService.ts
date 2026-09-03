@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { EBikeDevice, DriverProfile } from '../types';
+import { logActivity } from './activityLogService';
 
 /**
  * Real-time listener for all E-Bike hardware devices
@@ -76,13 +77,52 @@ export async function registerEBike(data: {
   };
 
   await setDoc(ebikeRef, newBike);
+
+  // Audit log creation
+  logActivity({
+    action: 'CREATE',
+    actionLabel: 'Registered E-Shuttle',
+    entityType: 'SHUTTLE',
+    entityId: deviceId,
+    entityName: newBike.name,
+    summary: `Registered e-shuttle hardware device "${newBike.name}" (ID: ${deviceId}, S/N: ${newBike.serialNumber})`,
+    details: {
+      summary: `E-shuttle added to fleet inventory in zone "${newBike.zoneName || 'Default'}"`,
+      after: {
+        deviceId,
+        name: newBike.name,
+        serialNumber: newBike.serialNumber,
+        zoneId: newBike.zoneId,
+        zoneName: newBike.zoneName,
+      },
+    },
+    severity: 'success',
+  }).catch(() => {});
 }
 
 /**
  * Delete an E-Bike device
  */
 export async function deleteEBike(deviceId: string): Promise<void> {
+  const existingDoc = await getDoc(doc(db, 'ebikes', deviceId)).catch(() => null);
+  const existingData = existingDoc?.exists() ? existingDoc.data() : null;
+
   await deleteDoc(doc(db, 'ebikes', deviceId));
+
+  // Audit log deletion
+  logActivity({
+    action: 'DELETE',
+    actionLabel: 'Decommissioned E-Shuttle',
+    entityType: 'SHUTTLE',
+    entityId: deviceId,
+    entityName: existingData?.name || deviceId,
+    summary: `Decommissioned and deleted e-shuttle device "${existingData?.name || deviceId}" from fleet`,
+    details: {
+      summary: `Device removed from active fleet inventory`,
+      before: existingData,
+    },
+    severity: 'danger',
+  }).catch(() => {});
 }
 
 /**
@@ -123,6 +163,23 @@ export async function pairDriverRfidCard(driverUid: string, rfidCardUid: string)
     rfidCardUid: cleanRfid,
     updatedAt: serverTimestamp(),
   });
+
+  // Audit log RFID pairing
+  const currentDriverSnap = await getDoc(driverRef).catch(() => null);
+  const driverData = currentDriverSnap?.data() as DriverProfile | undefined;
+  logActivity({
+    action: 'UPDATE',
+    actionLabel: 'Paired RFID Card',
+    entityType: 'DRIVER',
+    entityId: driverUid,
+    entityName: driverData?.fullName || driverUid,
+    summary: `Paired RFID card "${cleanRfid}" to driver "${driverData?.fullName || driverUid}"`,
+    details: {
+      summary: `Hardware RFID card linked to driver credentials for tap-in/out authentication`,
+      after: { driverUid, rfidCardUid: cleanRfid },
+    },
+    severity: 'info',
+  }).catch(() => {});
 }
 
 /**
@@ -188,6 +245,21 @@ export async function processRfidTapEvent(
       activeEbikeId: null,
       updatedAt: serverTimestamp(),
     });
+
+    logActivity({
+      action: 'STATUS_CHANGE',
+      actionLabel: 'Driver Tapped Out',
+      entityType: 'SHUTTLE',
+      entityId: cleanDeviceId,
+      entityName: ebike.name,
+      summary: `Driver "${driver.fullName}" tapped out of shuttle "${ebike.name}" (OFFLINE)`,
+      details: {
+        summary: `RFID card tap-out recorded for vehicle ${cleanDeviceId}`,
+        after: { availability: 'OFFLINE', shuttleStatus: 'AVAILABLE' },
+      },
+      performedBy: { uid: driverUid, name: driver.fullName, role: 'driver' },
+      severity: 'info',
+    }).catch(() => {});
 
     return {
       success: true,
@@ -288,6 +360,27 @@ export async function processRfidTapEvent(
   const takeoverDetail = prevDriverName
     ? ` Disconnected previous driver (${prevDriverName}).`
     : '';
+
+  logActivity({
+    action: 'STATUS_CHANGE',
+    actionLabel: 'Driver Tapped In',
+    entityType: 'SHUTTLE',
+    entityId: cleanDeviceId,
+    entityName: ebike.name,
+    summary: `Driver "${driver.fullName}" tapped in to shuttle "${ebike.name}" (ONLINE)${takeoverDetail}`,
+    details: {
+      summary: `RFID card tap-in authorized vehicle deployment`,
+      after: {
+        driverUid,
+        driverName: driver.fullName,
+        availability: 'ONLINE',
+        shuttleStatus: 'IN_USE',
+        prevDriverName: prevDriverName || null,
+      },
+    },
+    performedBy: { uid: driverUid, name: driver.fullName, role: 'driver' },
+    severity: 'success',
+  }).catch(() => {});
 
   return {
     success: true,

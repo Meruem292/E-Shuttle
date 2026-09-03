@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { getOrCreateChannel, sendChatMessage } from './chatService';
+import { logActivity } from './activityLogService';
 
 export type IncidentCategory =
   | 'accident'
@@ -181,6 +182,28 @@ export async function createIncidentTicket(params: {
   saveLocalTickets([createdTicket, ...local]);
   notifyTicketSubscribers();
 
+  // Audit log incident creation
+  logActivity({
+    action: 'CREATE',
+    actionLabel: 'Reported Incident',
+    entityType: 'INCIDENT',
+    entityId: createdTicket.id,
+    entityName: `Ticket #${ticketNum}`,
+    summary: `${params.reporterName} reported ${params.category} incident: "${params.subject}" (${params.priority.toUpperCase()})`,
+    details: {
+      summary: params.description,
+      after: {
+        ticketNumber: ticketNum,
+        category: params.category,
+        priority: params.priority,
+        subject: params.subject,
+        location: params.locationAddress,
+      },
+    },
+    performedBy: { uid: params.reporterId, name: params.reporterName, role: params.reporterRole },
+    severity: params.priority === 'emergency' ? 'danger' : params.priority === 'high' ? 'warning' : 'info',
+  }).catch(() => {});
+
   return createdTicket;
 }
 
@@ -293,5 +316,20 @@ export async function updateTicketStatus(
     if (status === 'resolved' || status === 'closed') local[idx].resolvedAt = nowIso;
     saveLocalTickets(local);
     notifyTicketSubscribers();
+
+    // Audit log ticket status update
+    logActivity({
+      action: 'UPDATE',
+      actionLabel: `Ticket ${status.toUpperCase()}`,
+      entityType: 'INCIDENT',
+      entityId: ticketId,
+      entityName: local[idx].ticketNumber || ticketId,
+      summary: `Incident ticket "${local[idx].subject || ticketId}" was marked as ${status.toUpperCase()}${adminNotes ? `: "${adminNotes}"` : ''}`,
+      details: {
+        summary: adminNotes || `Status updated to ${status}`,
+        after: { ticketId, status, adminNotes },
+      },
+      severity: status === 'resolved' ? 'success' : status === 'closed' ? 'info' : 'warning',
+    }).catch(() => {});
   }
 }

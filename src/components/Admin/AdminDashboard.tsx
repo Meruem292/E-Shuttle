@@ -17,6 +17,8 @@ import { EBikeManagement } from './EBikeManagement';
 import { AdminEBikeMap } from './AdminEBikeMap';
 import { StationManagement } from './StationManagement';
 import { ZoneManagement } from './ZoneManagement';
+import { ActivityLogsView } from './ActivityLogsView';
+import { AdminTutorialModal } from './AdminTutorialModal';
 import { listenToOperationalZones } from '../../services/zoneService';
 import { OperationalZone } from '../../types';
 import { pairDriverRfidCard, subscribeToAdminRegistrationRfid } from '../../services/ebikeService';
@@ -36,6 +38,7 @@ import {
   subscribeToUserChannels,
   ChatChannel,
 } from '../../services/chatService';
+import { logActivity } from '../../services/activityLogService';
 import {
   LogOut,
   HelpCircle,
@@ -74,6 +77,11 @@ import {
   Lock,
   ShieldCheck,
   UserCog,
+  ClipboardList,
+  Activity,
+  BookOpen,
+  Sparkles,
+  GraduationCap,
 } from 'lucide-react';
 import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from '../../services/logoService';
 import { uploadLogoToFirebaseStorage, convertFileToBase64 } from '../../services/firebaseStorageService';
@@ -323,6 +331,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedTicketChannelId, setSelectedTicketChannelId] = useState<string | null>(null);
   const [directChatTarget, setDirectChatTarget] = useState<{ id: string; name: string; role: 'customer' | 'driver' | 'admin' } | null>(null);
   const [isFaqOpen, setIsFaqOpen] = useState<boolean>(false);
+  const [isTutorialOpen, setIsTutorialOpen] = useState<boolean>(false);
+  const [tutorialInitialStep, setTutorialInitialStep] = useState<number>(0);
+  const [isTutorialBannerDismissed, setIsTutorialBannerDismissed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('admin_tutorial_banner_dismissed') === 'true';
+    } catch {
+      return false;
+    }
+  });
 
   // Native Back Button Handlers for Admin Modals
   useBackHandler(
@@ -501,6 +518,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Handler: Update Driver Zone
   const handleUpdateDriverZone = async (driverId: string, zoneId: string) => {
     const matchedZone = zones.find((z) => z.id === zoneId);
+    const targetDriver = drivers.find((d) => d.uid === driverId);
     try {
       await updateDoc(doc(db, 'drivers', driverId), {
         zoneId: zoneId || null,
@@ -514,6 +532,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           zoneName: matchedZone?.name || null,
         });
       }
+
+      logActivity({
+        action: 'UPDATE',
+        actionLabel: 'Reassigned Driver Zone',
+        entityType: 'DRIVER',
+        entityId: driverId,
+        entityName: targetDriver?.fullName || driverId,
+        summary: `Driver "${targetDriver?.fullName || driverId}" zone updated to "${matchedZone?.name || 'Unassigned'}"`,
+        details: {
+          summary: `Driver assigned to operational coverage zone`,
+          before: { zoneId: targetDriver?.zoneId, zoneName: targetDriver?.zoneName },
+          after: { zoneId: zoneId || null, zoneName: matchedZone?.name || null },
+        },
+        severity: 'info',
+      }).catch(() => {});
     } catch (err) {
       console.error('Error updating driver zone:', err);
     }
@@ -524,6 +557,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     driverId: string,
     newStatus: 'APPROVED' | 'REJECTED' | 'SUSPENDED'
   ) => {
+    const targetDriver = drivers.find((d) => d.uid === driverId);
     try {
       await updateDoc(doc(db, 'drivers', driverId), {
         accountStatus: newStatus,
@@ -532,6 +566,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (selectedDriverModal && selectedDriverModal.uid === driverId) {
         setSelectedDriverModal({ ...selectedDriverModal, accountStatus: newStatus });
       }
+
+      logActivity({
+        action: 'STATUS_CHANGE',
+        actionLabel: `Driver ${newStatus}`,
+        entityType: 'DRIVER',
+        entityId: driverId,
+        entityName: targetDriver?.fullName || driverId,
+        summary: `Driver "${targetDriver?.fullName || driverId}" account status changed to ${newStatus}`,
+        details: {
+          summary: `Admin modified driver approval state`,
+          before: { accountStatus: targetDriver?.accountStatus },
+          after: { accountStatus: newStatus },
+        },
+        severity: newStatus === 'APPROVED' ? 'success' : 'danger',
+      }).catch(() => {});
     } catch (err) {
       console.error('Error updating driver status:', err);
     }
@@ -542,6 +591,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     userId: string,
     newStatus: 'APPROVED' | 'SUSPENDED'
   ) => {
+    const targetCustomer = customers.find((c) => c.uid === userId);
     try {
       await updateDoc(doc(db, 'users', userId), {
         accountStatus: newStatus,
@@ -550,6 +600,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (selectedCustomer && selectedCustomer.uid === userId) {
         setSelectedCustomer({ ...selectedCustomer, accountStatus: newStatus });
       }
+
+      logActivity({
+        action: 'STATUS_CHANGE',
+        actionLabel: `User ${newStatus}`,
+        entityType: 'USER',
+        entityId: userId,
+        entityName: targetCustomer?.fullName || userId,
+        summary: `User "${targetCustomer?.fullName || userId}" account status changed to ${newStatus}`,
+        details: {
+          summary: `Admin modified customer account state`,
+          before: { accountStatus: targetCustomer?.accountStatus },
+          after: { accountStatus: newStatus },
+        },
+        severity: newStatus === 'APPROVED' ? 'success' : 'danger',
+      }).catch(() => {});
     } catch (err) {
       console.error('Error updating customer status:', err);
     }
@@ -606,6 +671,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       });
       setSettingsSuccess(true);
       setTimeout(() => setSettingsSuccess(false), 3000);
+
+      logActivity({
+        action: 'SETTINGS_UPDATE',
+        actionLabel: 'Updated Fare & System Settings',
+        entityType: 'SETTINGS',
+        entityId: 'default',
+        entityName: 'Fare & Operational Policy',
+        summary: `Admin updated fare parameters (Base: ₱${fareSettings.baseFare}, Per Km: ₱${fareSettings.perKmRate}, Max Radius: ${fareSettings.maxServiceRadiusKm}km)`,
+        details: {
+          summary: `Operational dispatch fare configuration updated`,
+          after: fareSettings,
+        },
+        severity: 'info',
+      }).catch(() => {});
     } catch (err) {
       console.error('Error saving settings:', err);
     } finally {
@@ -712,7 +791,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   });
 
   // Strict tab resolution fallback to ensure contents never render blank on page refresh
-  const validAdminTabs = ['dashboard', 'zones', 'stations', 'users', 'customers', 'drivers', 'rides', 'ebikes', 'incidents', 'settings'];
+  const validAdminTabs = ['dashboard', 'zones', 'stations', 'users', 'customers', 'drivers', 'rides', 'ebikes', 'incidents', 'settings', 'logs', 'audit'];
   const currentTab = activeTab === 'map' ? 'dashboard' : validAdminTabs.includes(activeTab) ? activeTab : 'dashboard';
 
   // Dynamic header information based on active page view
@@ -724,6 +803,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           title: 'Admin Control Panel',
           badge: 'OVERVIEW',
           subtitle: 'Real-time e-shuttle monitoring, pickup alerts, and trip management',
+        };
+      case 'logs':
+      case 'audit':
+        return {
+          title: 'System Activity & Audit Logs',
+          badge: 'AUDIT TRAIL',
+          subtitle: 'Real-time tracking of all CRUD events, state changes, and operations for backtracking',
         };
       case 'users':
       case 'customers':
@@ -806,6 +892,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         <div className="flex items-center gap-2 shrink-0">
           <button
+            onClick={() => {
+              setTutorialInitialStep(0);
+              setIsTutorialOpen(true);
+            }}
+            className="px-3 py-1.5 bg-amber-400 hover:bg-amber-500 text-slate-900 border-2 border-amber-500 rounded-xl font-black text-xs uppercase flex items-center gap-1.5 active:scale-95 shadow-sm transition-all"
+            title="Open Interactive Administrator Tutorial & Backtracking Masterclass"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-slate-900" />
+            <span className="hidden sm:inline">Admin Tutorial</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('logs')}
+            className={`px-3 py-1.5 rounded-xl font-black text-xs uppercase flex items-center gap-1.5 active:scale-95 shadow-sm transition-all border-2 ${
+              currentTab === 'logs' || currentTab === 'audit'
+                ? 'bg-[#0D47A1] text-white border-[#0D47A1]'
+                : 'bg-white text-[#0D47A1] border-[#0D47A1] hover:bg-[#E3F2FD]'
+            }`}
+            title="View Real-Time System Activity Logs & Backtracking"
+          >
+            <Activity className="w-3.5 h-3.5 text-emerald-500" />
+            <span className="hidden sm:inline">Audit Logs</span>
+          </button>
+
+          <button
             onClick={() => setIsFaqOpen(true)}
             className="px-3 py-1.5 bg-[#0D47A1] text-white hover:bg-[#1565C0] border-2 border-[#0D47A1] rounded-xl font-black text-xs uppercase flex items-center gap-1.5 active:scale-95 shadow-sm transition-all"
             title="View Official Program Specs, FAQs, Routes & Developer Team"
@@ -832,6 +943,70 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
          ========================================================================= */}
       {currentTab === 'dashboard' && (
         <div className="space-y-5 animate-in fade-in duration-200">
+          {/* Welcome & Interactive Tutorial Banner */}
+          {!isTutorialBannerDismissed && (
+            <div className="bg-gradient-to-r from-[#0D47A1] via-[#1565C0] to-[#0D47A1] text-white p-4 sm:p-5 rounded-3xl border-2 border-[#0D47A1] shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative overflow-hidden">
+              <div className="absolute -right-8 -bottom-8 w-40 h-40 bg-white/5 rounded-full blur-2xl pointer-events-none" />
+
+              <div className="flex items-start sm:items-center gap-3.5 z-10">
+                <div className="w-12 h-12 rounded-2xl bg-amber-400 text-slate-900 flex items-center justify-center shrink-0 shadow-lg font-black">
+                  <GraduationCap className="w-6 h-6" />
+                </div>
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-black uppercase tracking-wider bg-amber-400 text-slate-900 px-2 py-0.5 rounded-full shadow-xs">
+                      Admin Onboarding & Guide
+                    </span>
+                    <span className="text-xs text-blue-200 font-bold">New to the Tagbilaran E-Shuttle Hub?</span>
+                  </div>
+                  <h2 className="text-base sm:text-lg font-black text-white">
+                    Interactive Walkthrough: Fleet Ops & CRUD Backtracking
+                  </h2>
+                  <p className="text-xs text-blue-100 font-medium max-w-2xl leading-relaxed">
+                    Learn how to manage geofenced zones, pair contactless RFID cards, vet drivers, dispatch live shuttles, and use the <strong>Activity Logs engine to backtrack changes and recover prior states</strong>.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap shrink-0 z-10 w-full md:w-auto">
+                <button
+                  onClick={() => {
+                    setTutorialInitialStep(0);
+                    setIsTutorialOpen(true);
+                  }}
+                  className="flex-1 md:flex-initial px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase rounded-xl flex items-center justify-center gap-1.5 active:scale-95 shadow-md transition-all"
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>Start Tutorial</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setTutorialInitialStep(6);
+                    setIsTutorialOpen(true);
+                  }}
+                  className="flex-1 md:flex-initial px-3.5 py-2 bg-white/15 hover:bg-white/25 text-white border border-white/30 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+                >
+                  <Database className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Backtracking Guide</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setIsTutorialBannerDismissed(true);
+                    try {
+                      localStorage.setItem('admin_tutorial_banner_dismissed', 'true');
+                    } catch {}
+                  }}
+                  className="px-2.5 py-2 text-blue-200 hover:text-white text-xs font-bold transition-colors"
+                  title="Dismiss this onboarding banner"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* KPI Stat Cards Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <div
@@ -925,7 +1100,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           {/* Quick Action Navigation Shortcuts */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2.5">
             <button
               onClick={() => setActiveTab('zones')}
               title="Create and configure geographic service zones"
@@ -1013,6 +1188,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="overflow-hidden">
                 <div className="text-xs font-bold text-[#0D47A1] truncate">E-Shuttles & RFID</div>
                 <div className="text-[10px] text-[#0D47A1] font-bold truncate">Manage shuttles & cards</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('logs')}
+              title="Inspect system activity audit trail and backtrack CRUD changes"
+              className="p-3 bg-white border-2 border-emerald-600 hover:bg-emerald-50/50 rounded-2xl flex items-center gap-3 text-left transition-all shadow-sm group"
+            >
+              <div className="w-9 h-9 bg-emerald-600 rounded-xl flex items-center justify-center text-white group-hover:bg-emerald-700 transition-colors shrink-0 shadow-sm">
+                <ClipboardList className="w-4 h-4" />
+              </div>
+              <div className="overflow-hidden">
+                <div className="text-xs font-bold text-emerald-800 truncate">Audit Logs</div>
+                <div className="text-[10px] text-emerald-600 font-bold truncate">CRUD & Backtracking</div>
               </div>
             </button>
           </div>
@@ -2692,6 +2881,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
+      {/* =========================================================================
+          VIEW 7: ACTIVITY AUDIT LOGS & CRUD BACKTRACKING
+         ========================================================================= */}
+      {(currentTab === 'logs' || currentTab === 'audit') && (
+        <ActivityLogsView
+          onOpenTutorial={() => {
+            setTutorialInitialStep(6);
+            setIsTutorialOpen(true);
+          }}
+        />
+      )}
+
       {/* Bottom Clearance Spacer for Fixed Navigation Bar */}
       <div className="h-32 w-full shrink-0" />
 
@@ -2755,6 +2956,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       <FaqAboutModal
         isOpen={isFaqOpen}
         onClose={() => setIsFaqOpen(false)}
+      />
+
+      {/* Comprehensive Administrator Tutorial, Backtracking Masterclass & Cheat Sheet */}
+      <AdminTutorialModal
+        isOpen={isTutorialOpen}
+        onClose={() => setIsTutorialOpen(false)}
+        onNavigateTab={(tab) => setActiveTab(tab)}
+        initialStepIndex={tutorialInitialStep}
       />
     </div>
   );

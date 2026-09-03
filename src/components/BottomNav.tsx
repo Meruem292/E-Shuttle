@@ -18,6 +18,7 @@ import {
   Layers,
   MessageSquare,
   ShieldAlert,
+  ClipboardList,
 } from 'lucide-react';
 
 interface BottomNavProps {
@@ -339,6 +340,21 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             {showSettingsDot && <RedDot />}
           </div>
           <span className="truncate">Settings</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('logs')}
+          title="System activity audit trail and CRUD backtracking"
+          className={`flex flex-col items-center gap-0.5 text-[9px] sm:text-xs py-1.5 px-1.5 sm:px-2 rounded-xl transition-all ${
+            activeTab === 'logs' || activeTab === 'audit'
+              ? 'text-white bg-[#0D47A1] font-extrabold shadow-md border border-[#0D47A1]'
+              : 'text-[#0D47A1]/70 hover:text-[#0D47A1] font-bold'
+          }`}
+        >
+          <div className="relative flex items-center justify-center">
+            <ClipboardList className={`w-4 h-4 ${activeTab === 'logs' || activeTab === 'audit' ? 'text-white' : 'text-[#0D47A1]/70'}`} />
+          </div>
+          <span className="truncate">Logs</span>
         </button>
       </div>
     );
