@@ -32,7 +32,8 @@ export type ActivityEntityType =
   | 'DRIVER'
   | 'INCIDENT'
   | 'SETTINGS'
-  | 'AUTH';
+  | 'AUTH'
+  | 'ADMIN';
 
 export interface ActivityUser {
   uid: string;
@@ -109,11 +110,13 @@ function resolveCurrentActor(): ActivityUser {
   try {
     const currentUser = auth.currentUser;
     if (currentUser) {
+      const email = currentUser.email || '';
+      const isAdmin = email.toLowerCase() === 'admin@eshuttle.com' || email.toLowerCase().startsWith('admin');
       return {
         uid: currentUser.uid,
-        name: currentUser.displayName || currentUser.email?.split('@')[0] || 'Authenticated User',
+        name: currentUser.displayName || (isAdmin ? 'Platform Administrator' : email.split('@')[0]) || 'Authenticated User',
         email: currentUser.email || undefined,
-        role: 'admin', // fallback default
+        role: isAdmin ? 'admin' : 'admin', // fallback default
       };
     }
   } catch {}

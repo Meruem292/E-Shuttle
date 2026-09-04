@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Clock,
   Shield,
+  ShieldCheck,
   User,
   MapPin,
   Layers,
@@ -170,6 +171,8 @@ export const ActivityLogsView: React.FC<ActivityLogsViewProps> = ({ onOpenTutori
         return <Sliders className="w-4 h-4 text-slate-600" />;
       case 'AUTH':
         return <Key className="w-4 h-4 text-violet-600" />;
+      case 'ADMIN':
+        return <ShieldCheck className="w-4 h-4 text-[#0D47A1]" />;
       default:
         return <Activity className="w-4 h-4 text-slate-600" />;
     }
@@ -348,6 +351,7 @@ export const ActivityLogsView: React.FC<ActivityLogsViewProps> = ({ onOpenTutori
             <option value="INCIDENT">🚨 Incidents</option>
             <option value="SETTINGS">⚙️ System Settings</option>
             <option value="AUTH">🔐 Auth & Sessions</option>
+            <option value="ADMIN">🛡️ Admin & Credentials</option>
           </select>
 
           {/* Action Type Selector */}

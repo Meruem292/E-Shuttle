@@ -341,6 +341,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await setDoc(userDocRef, adminDoc);
         setUserProfile(adminDoc);
         setRole('admin');
+
+        logActivity({
+          action: 'CREATE',
+          actionLabel: 'Provisioned Master Admin',
+          entityType: 'ADMIN',
+          entityId: res.user.uid,
+          entityName: 'Platform Administrator',
+          summary: `Master administrator profile initialized for "${resolvedEmail}"`,
+          details: {
+            summary: 'Initial master admin profile document created in Firestore',
+            after: { uid: res.user.uid, email: resolvedEmail, role: 'admin', username: 'admin' },
+          },
+          performedBy: { uid: res.user.uid, name: 'Platform Administrator', email: resolvedEmail, role: 'admin' },
+          severity: 'success',
+        }).catch(() => {});
       }
 
       logActivity({
@@ -478,14 +493,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(false);
 
     if (prevUser) {
+      const isAdmin = prevProfile?.role === 'admin' || prevUser.email === 'admin@eshuttle.com';
       logActivity({
         action: 'AUTH_LOGOUT',
-        actionLabel: 'User Signed Out',
+        actionLabel: isAdmin ? 'Admin Signed Out' : 'User Signed Out',
         entityType: 'AUTH',
         entityId: prevUser.uid,
         entityName: prevProfile?.fullName || prevUser.email || prevUser.uid,
-        summary: `User "${prevProfile?.fullName || prevUser.email || prevUser.uid}" signed out of session`,
-        performedBy: { uid: prevUser.uid, name: prevProfile?.fullName || 'User', email: prevUser.email || undefined },
+        summary: isAdmin
+          ? `Administrator "${prevProfile?.fullName || prevUser.email}" signed out of Admin Console`
+          : `User "${prevProfile?.fullName || prevUser.email || prevUser.uid}" signed out of session`,
+        performedBy: {
+          uid: prevUser.uid,
+          name: prevProfile?.fullName || (isAdmin ? 'Platform Administrator' : 'User'),
+          email: prevUser.email || undefined,
+          role: isAdmin ? 'admin' : (prevProfile?.role || 'user'),
+        },
         severity: 'info',
       }).catch(() => {});
     }
