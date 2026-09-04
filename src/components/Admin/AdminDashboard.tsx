@@ -25,7 +25,6 @@ import { pairDriverRfidCard, subscribeToAdminRegistrationRfid } from '../../serv
 import { useBackHandler } from '../../contexts/NativeBackContext';
 import officialLogo from '../../images/official_logo.jpg';
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
-import { ChatFloatingButton } from '../Common/ChatFloatingButton';
 import { ChatDrawer } from '../Common/ChatDrawer';
 import { FaqAboutModal } from '../Common/FaqAboutModal';
 import {

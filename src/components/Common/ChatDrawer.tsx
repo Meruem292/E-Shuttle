@@ -269,24 +269,13 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 shrink-0">
-              {/* Report Incident Trigger */}
-              <button
-                onClick={() => setShowReportModal(true)}
-                className="px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow transition-colors"
-                title="Report incident or file support ticket"
-              >
-                <AlertTriangle className="w-3 h-3" />
-                <span>Report Incident</span>
-              </button>
-
-              <button
-                onClick={onClose}
-                className="p-1.5 hover:bg-white/20 rounded-xl transition-colors text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+            <button
+              onClick={onClose}
+              className="p-1.5 hover:bg-white/20 rounded-xl transition-colors text-white shrink-0"
+              title="Close chat drawer"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
 
           {/* =========================================================================
@@ -508,15 +497,12 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                 {filterTab === 'tickets' ? (
                   /* TICKETS LIST VIEW */
                   tickets.length === 0 ? (
-                    <div className="text-center py-10 text-slate-400 space-y-2">
-                      <ShieldAlert className="w-8 h-8 mx-auto text-rose-400" />
-                      <p className="text-xs font-bold text-slate-500">No incident tickets filed</p>
-                      <button
-                        onClick={() => setShowReportModal(true)}
-                        className="px-3 py-1.5 bg-rose-600 text-white font-black text-xs rounded-xl shadow"
-                      >
-                        + File Incident Report
-                      </button>
+                    <div className="text-center py-8 text-slate-400 space-y-1 bg-white rounded-2xl border border-dashed border-slate-200">
+                      <ShieldAlert className="w-7 h-7 mx-auto text-rose-300" />
+                      <p className="text-xs font-bold text-slate-600">No incident tickets filed</p>
+                      <p className="text-[10px] text-slate-400">
+                        Tap "Report Incident" above to file an incident or safety report.
+                      </p>
                     </div>
                   ) : (
                     tickets.map((t) => (

@@ -16,10 +16,8 @@ import {
   Navigation,
   Compass,
   Layers,
-  MessageSquare,
   ArrowRight,
 } from 'lucide-react';
-import { ChatFloatingButton } from '../Common/ChatFloatingButton';
 import {
   calculateFare,
   calculateDistanceKm,
@@ -1529,20 +1527,6 @@ export const HomeMapBooking: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* Global 2-Way Chat Floating Button */}
-      <ChatFloatingButton
-        initialBookingId={activeBooking?.id}
-        initialTargetUser={
-          activeBooking?.driverId
-            ? {
-                id: activeBooking.driverId,
-                name: activeBooking.driverName || 'Driver',
-                role: 'driver',
-              }
-            : undefined
-        }
-      />
     </div>
   );
 };

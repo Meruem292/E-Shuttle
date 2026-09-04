@@ -11,7 +11,7 @@ import { DriverRides } from './components/Driver/DriverRides';
 import { DriverProfile } from './components/Driver/DriverProfile';
 import { AdminDashboard } from './components/Admin/AdminDashboard';
 import { PWAInstallButton } from './components/PWAInstallPrompt';
-import { ChatFloatingButton } from './components/Common/ChatFloatingButton';
+import { ChatDrawer } from './components/Common/ChatDrawer';
 import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from './services/logoService';
 
 const MainAppContent: React.FC = () => {
@@ -135,10 +135,10 @@ const MainAppContent: React.FC = () => {
         )}
       </div>
 
-      {/* Global Live Chat & Incident Support Floating Button */}
-      <ChatFloatingButton
-        externalIsOpen={isChatOpen}
-        onRequestClose={() => setIsChatOpen(false)}
+      {/* Global Live Chat & Incident Support Drawer (Controlled via BottomNav) */}
+      <ChatDrawer
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
       />
 
       {/* Bottom Navigation */}

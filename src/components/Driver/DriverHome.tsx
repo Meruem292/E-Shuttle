@@ -25,7 +25,6 @@ import { doc, updateDoc, onSnapshot, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../firebase/config';
 import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from '../../services/logoService';
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
-import { ChatFloatingButton } from '../Common/ChatFloatingButton';
 
 export const DriverHome: React.FC = () => {
   const { driverProfile, currentUser } = useAuth();
@@ -542,20 +541,6 @@ export const DriverHome: React.FC = () => {
           </div>
         )}
       </div>
-
-      {/* Global 2-Way Chat Floating Button for Drivers & Dispatch */}
-      <ChatFloatingButton
-        initialBookingId={activeRide?.id}
-        initialTargetUser={
-          activeRide?.customerId
-            ? {
-                id: activeRide.customerId,
-                name: activeRide.customerName || 'Passenger',
-                role: 'customer',
-              }
-            : undefined
-        }
-      />
     </div>
   );
 };
