@@ -145,7 +145,7 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
       ],
       proTips: [
         'The dashboard auto-updates in real time via Firestore subscriptions without needing manual page reloads.',
-        'Use the top-right "Audit Logs" button at any time to verify recent team actions.',
+        'Use the "Logs" tab on the bottom bar at any time to verify recent team actions.',
       ],
       backtrackingRelevance:
         'All admin sessions and logins are logged under AUTH events with timestamps and role designations.',
@@ -462,7 +462,7 @@ export const AdminTutorialModal: React.FC<AdminTutorialModalProps> = ({
       title: 'How do I recover an accidentally deleted or moved station?',
       category: 'Stations & Backtracking',
       steps: [
-        'Open the Activity Logs tab (click "Audit Logs" at the top right).',
+        'Open the Activity Logs tab (tap "Logs" on the bottom navigation bar).',
         'Filter Entity to "STATION" and Action to "UPDATE" or "DELETE".',
         'Find the log corresponding to the station and click "Inspect".',
         'Look at the "BEFORE CHANGE" JSON box to copy the exact previous latitude, longitude, and capacity.',

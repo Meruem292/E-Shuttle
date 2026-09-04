@@ -7,10 +7,79 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Default catch-all for development
+    // Activity & Audit Trail Logs
+    match /activityLogs/{logId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if isAuthenticated();
+    }
+
+    // Incident Tickets & Safety Escalations
+    match /incidentTickets/{ticketId} {
+      allow read, write: if true;
+    }
+
+    // Live 2-Way Chat Channels & Nested Message Feeds
+    match /chatChannels/{channelId} {
+      allow read, write: if true;
+      match /messages/{messageId} {
+        allow read, write: if true;
+      }
+    }
+
+    // User & Passenger Profiles
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    // Driver Profiles & Real-Time Coordinates
+    match /drivers/{driverId} {
+      allow read, write: if true;
+    }
+
+    // Bookings & Trip Requests
+    match /bookings/{bookingId} {
+      allow read, write: if true;
+    }
+
+    // Historic Rides & Trips
+    match /rides/{rideId} {
+      allow read, write: if true;
+    }
+
+    // Passenger Ratings & Driver Reviews
+    match /ratings/{ratingId} {
+      allow read, write: if true;
+    }
+
+    // Stations & Terminals
+    match /shuttleStations/{stationId} {
+      allow read, write: if true;
+    }
+    match /stations/{stationId} {
+      allow read, write: if true;
+    }
+
+    // Operating Zones & Geo-fences
+    match /zones/{zoneId} {
+      allow read, write: if true;
+    }
+
+    // E-Bikes Fleet & Hardware RFID Telemetry
+    match /ebikes/{bikeId} {
+      allow read, write: if true;
+    }
+
+    // System & Fare Admin Settings
+    match /adminSettings/{settingId} {
+      allow read, write: if true;
+    }
+
+    // Default catch-all for development and fallback
     match /{document=**} {
       allow read, write: if true;
     }
   }
 }
+
 

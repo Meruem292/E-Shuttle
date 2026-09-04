@@ -105,6 +105,76 @@
         "createdAt": { "type": "timestamp", "description": "Created time" },
         "updatedAt": { "type": "timestamp", "description": "Updated time" }
       }
+    },
+    "activityLogs": {
+      "fields": {
+        "action": { "type": "string", "description": "CREATE, UPDATE, DELETE, AUTH_LOGIN, etc." },
+        "actionLabel": { "type": "string", "description": "Readable action title" },
+        "entityType": { "type": "string", "description": "STATION, ZONE, SHUTTLE, RIDE, USER, etc." },
+        "entityId": { "type": "string", "description": "Target entity ID" },
+        "entityName": { "type": "string", "description": "Target entity label" },
+        "summary": { "type": "string", "description": "Brief log summary" },
+        "details": { "type": "map", "description": "Before/after values or metadata" },
+        "performedBy": { "type": "map", "description": "Actor uid, name, email, role" },
+        "timestamp": { "type": "string", "description": "ISO timestamp string" },
+        "severity": { "type": "string", "description": "info, success, warning, danger" },
+        "createdAt": { "type": "timestamp", "description": "Server timestamp" }
+      }
+    },
+    "incidentTickets": {
+      "fields": {
+        "ticketNumber": { "type": "string", "description": "Formatted ticket number" },
+        "category": { "type": "string", "description": "Incident category" },
+        "subject": { "type": "string", "description": "Ticket subject" },
+        "description": { "type": "string", "description": "Details of incident" },
+        "priority": { "type": "string", "description": "low, medium, high, emergency" },
+        "status": { "type": "string", "description": "open, in_progress, resolved, closed" },
+        "reporterId": { "type": "string", "description": "Reporter UID" },
+        "reporterName": { "type": "string", "description": "Reporter Name" },
+        "reporterRole": { "type": "string", "description": "customer, driver, admin" },
+        "channelId": { "type": "string", "description": "Associated chat channel ID" },
+        "createdAt": { "type": "timestamp", "description": "Creation timestamp" },
+        "updatedAt": { "type": "timestamp", "description": "Last updated timestamp" }
+      }
+    },
+    "chatChannels": {
+      "fields": {
+        "title": { "type": "string", "description": "Channel display title" },
+        "subtitle": { "type": "string", "description": "Channel subtitle" },
+        "type": { "type": "string", "description": "ride, support, direct" },
+        "participants": { "type": "array", "description": "Participant details" },
+        "lastMessage": { "type": "string", "description": "Preview of last message" },
+        "lastMessageSender": { "type": "string", "description": "Sender of last message" },
+        "createdAt": { "type": "timestamp", "description": "Creation timestamp" },
+        "updatedAt": { "type": "timestamp", "description": "Last updated timestamp" }
+      }
+    },
+    "zones": {
+      "fields": {
+        "name": { "type": "string", "description": "Geofence zone name" },
+        "description": { "type": "string", "description": "Zone description" },
+        "color": { "type": "string", "description": "Zone border color" },
+        "fillColor": { "type": "string", "description": "Zone fill color" },
+        "fillOpacity": { "type": "number", "description": "Fill opacity" },
+        "polygon": { "type": "array", "description": "Array of lat/lng coordinate pairs" },
+        "status": { "type": "string", "description": "active, inactive, restricted" },
+        "maxSpeedKmH": { "type": "number", "description": "Zone speed limit" },
+        "createdAt": { "type": "timestamp", "description": "Creation timestamp" },
+        "updatedAt": { "type": "timestamp", "description": "Last update timestamp" }
+      }
+    },
+    "ebikes": {
+      "fields": {
+        "code": { "type": "string", "description": "Unique e-bike asset code" },
+        "plateNumber": { "type": "string", "description": "Plate number" },
+        "model": { "type": "string", "description": "E-bike model" },
+        "status": { "type": "string", "description": "AVAILABLE, ON_TRIP, MAINTENANCE, OFFLINE" },
+        "assignedDriverId": { "type": "string", "description": "Driver UID if assigned" },
+        "currentLocation": { "type": "map", "description": "lat, lng, address" },
+        "lastRfidCardUid": { "type": "string", "description": "Last physical RFID card UID tapped" },
+        "createdAt": { "type": "timestamp", "description": "Creation timestamp" },
+        "updatedAt": { "type": "timestamp", "description": "Last update timestamp" }
+      }
     }
   }
 }

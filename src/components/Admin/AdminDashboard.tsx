@@ -76,8 +76,6 @@ import {
   Lock,
   ShieldCheck,
   UserCog,
-  ClipboardList,
-  Activity,
   BookOpen,
   Sparkles,
   GraduationCap,
@@ -907,19 +905,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveTab('logs')}
-            className={`px-3 py-1.5 rounded-xl font-black text-xs uppercase flex items-center gap-1.5 active:scale-95 shadow-sm transition-all border-2 ${
-              currentTab === 'logs' || currentTab === 'audit'
-                ? 'bg-[#0D47A1] text-white border-[#0D47A1]'
-                : 'bg-white text-[#0D47A1] border-[#0D47A1] hover:bg-[#E3F2FD]'
-            }`}
-            title="View Real-Time System Activity Logs & Backtracking"
-          >
-            <Activity className="w-3.5 h-3.5 text-emerald-500" />
-            <span className="hidden sm:inline">Audit Logs</span>
-          </button>
-
-          <button
             onClick={() => setIsFaqOpen(true)}
             className="px-3 py-1.5 bg-[#0D47A1] text-white hover:bg-[#1565C0] border-2 border-[#0D47A1] rounded-xl font-black text-xs uppercase flex items-center gap-1.5 active:scale-95 shadow-sm transition-all"
             title="View Official Program Specs, FAQs, Routes & Developer Team"
@@ -1100,113 +1085,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="text-2xl font-black text-[#0D47A1]">{completedBookings.length}</div>
               <p className="text-[10px] text-slate-500 font-medium">Total finished trips</p>
             </div>
-          </div>
-
-          {/* Quick Action Navigation Shortcuts */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2.5">
-            <button
-              onClick={() => setActiveTab('zones')}
-              title="Create and configure geographic service zones"
-              className="p-3 bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD]/40 rounded-2xl flex items-center gap-3 text-left transition-all shadow-sm group"
-            >
-              <div className="w-9 h-9 bg-[#0D47A1] rounded-xl flex items-center justify-center text-white group-hover:bg-[#1565C0] transition-colors shrink-0 shadow-sm">
-                <Layers className="w-4 h-4" />
-              </div>
-              <div className="overflow-hidden">
-                <div className="text-xs font-bold text-[#0D47A1] truncate">Area Zones</div>
-                <div className="text-[10px] text-slate-500 truncate">{zones.length} service zones</div>
-              </div>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('stations')}
-              title="Pin and manage designated shuttle stations & geofences"
-              className="p-3 bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD]/40 rounded-2xl flex items-center gap-3 text-left transition-all shadow-sm group"
-            >
-              <div className="w-9 h-9 bg-[#0D47A1] rounded-xl flex items-center justify-center text-white group-hover:bg-[#1565C0] transition-colors shrink-0 shadow-sm">
-                <MapPin className="w-4 h-4" />
-              </div>
-              <div className="overflow-hidden">
-                <div className="text-xs font-bold text-[#0D47A1] truncate">Station Pins</div>
-                <div className="text-[10px] text-slate-500 truncate">Manage station pins & geofences</div>
-              </div>
-            </button>
-
-            <button
-              onClick={() => {
-                setUserTabRole('ALL');
-                setActiveTab('users');
-              }}
-              title="Manage registered users and driver accounts"
-              className="p-3 bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD]/40 rounded-2xl flex items-center gap-3 text-left transition-all shadow-sm group"
-            >
-              <div className="w-9 h-9 bg-[#0D47A1] rounded-xl flex items-center justify-center text-white group-hover:bg-[#1565C0] transition-colors shrink-0 shadow-sm">
-                <Users className="w-4 h-4" />
-              </div>
-              <div className="overflow-hidden">
-                <div className="text-xs font-bold text-[#0D47A1] truncate">Users & Drivers</div>
-                <div className="text-[10px] text-slate-500 truncate">{customersOnly.length + drivers.length} accounts</div>
-              </div>
-            </button>
-
-            <button
-              onClick={() => {
-                setUserTabRole('PENDING');
-                setActiveTab('users');
-              }}
-              title="Review and approve pending driver applications"
-              className="p-3 bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD]/40 rounded-2xl flex items-center gap-3 text-left transition-all shadow-sm group"
-            >
-              <div className="w-9 h-9 bg-[#0D47A1] rounded-xl flex items-center justify-center text-white group-hover:bg-[#1565C0] transition-colors shrink-0 shadow-sm">
-                <UserCheck className="w-4 h-4" />
-              </div>
-              <div className="overflow-hidden">
-                <div className="text-xs font-bold text-[#0D47A1] truncate">Driver Approvals</div>
-                <div className="text-[10px] text-slate-500 truncate">{pendingDrivers.length} waiting for approval</div>
-              </div>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('rides')}
-              title="View full history of all pick-up and drop-off records"
-              className="p-3 bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD]/40 rounded-2xl flex items-center gap-3 text-left transition-all shadow-sm group"
-            >
-              <div className="w-9 h-9 bg-[#0D47A1] rounded-xl flex items-center justify-center text-white group-hover:bg-[#1565C0] transition-colors shrink-0 shadow-sm">
-                <Route className="w-4 h-4" />
-              </div>
-              <div className="overflow-hidden">
-                <div className="text-xs font-bold text-[#0D47A1] truncate">Pick-up & Drop-off</div>
-                <div className="text-[10px] text-slate-500 truncate">{allBookings.length} total trips recorded</div>
-              </div>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('ebikes')}
-              title="Manage E-Shuttles and RFID access cards"
-              className="p-3 bg-white border-2 border-[#0D47A1] hover:bg-[#E3F2FD]/40 rounded-2xl flex items-center gap-3 text-left transition-all shadow-sm group"
-            >
-              <div className="w-9 h-9 bg-[#0D47A1] rounded-xl flex items-center justify-center text-white group-hover:bg-[#1565C0] transition-colors shrink-0 shadow-sm">
-                <Cpu className="w-4 h-4" />
-              </div>
-              <div className="overflow-hidden">
-                <div className="text-xs font-bold text-[#0D47A1] truncate">E-Shuttles & RFID</div>
-                <div className="text-[10px] text-[#0D47A1] font-bold truncate">Manage shuttles & cards</div>
-              </div>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('logs')}
-              title="Inspect system activity audit trail and backtrack CRUD changes"
-              className="p-3 bg-white border-2 border-emerald-600 hover:bg-emerald-50/50 rounded-2xl flex items-center gap-3 text-left transition-all shadow-sm group"
-            >
-              <div className="w-9 h-9 bg-emerald-600 rounded-xl flex items-center justify-center text-white group-hover:bg-emerald-700 transition-colors shrink-0 shadow-sm">
-                <ClipboardList className="w-4 h-4" />
-              </div>
-              <div className="overflow-hidden">
-                <div className="text-xs font-bold text-emerald-800 truncate">Audit Logs</div>
-                <div className="text-[10px] text-emerald-600 font-bold truncate">CRUD & Backtracking</div>
-              </div>
-            </button>
           </div>
 
           {/* INTEGRATED LIVE MAP */}

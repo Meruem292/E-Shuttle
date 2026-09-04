@@ -177,7 +177,12 @@ export async function logActivity(entry: {
     entityName: entry.entityName || null,
     summary: entry.summary,
     details: entry.details || null,
-    performedBy,
+    performedBy: {
+      uid: performedBy.uid || 'system',
+      name: performedBy.name || 'System Dispatcher',
+      ...(performedBy.email ? { email: performedBy.email } : {}),
+      ...(performedBy.role ? { role: performedBy.role } : {}),
+    },
     timestamp,
     severity,
   };
@@ -188,8 +193,17 @@ export async function logActivity(entry: {
       createdAt: serverTimestamp(),
     });
     assignedId = docRef.id;
-  } catch (err) {
-    console.warn('Firestore logActivity fallback to local:', err);
+  } catch (err: any) {
+    if (err?.code === 'permission-denied' || String(err?.message || err).includes('permissions')) {
+      if (typeof window !== 'undefined' && !(window as any).__eshuttle_activity_perm_warned) {
+        (window as any).__eshuttle_activity_perm_warned = true;
+        console.info(
+          'Firestore activityLogs: Running in local cache mode. Ensure firestore.rules has "match /activityLogs/{logId} { allow read, write: if true; }" deployed in Firebase Console to sync in cloud.'
+        );
+      }
+    } else {
+      console.warn('Firestore logActivity fallback to local:', err);
+    }
   }
 
   // Update local memory and cache
@@ -264,8 +278,15 @@ export function listenToActivityLogs(
         saveLocalActivityLogs(merged);
         callback(merged);
       },
-      (err) => {
-        console.warn('Firestore activity logs listener fallback to local:', err);
+      (err: any) => {
+        if (err?.code === 'permission-denied' || String(err?.message || err).includes('permissions')) {
+          if (typeof window !== 'undefined' && !(window as any).__eshuttle_listener_perm_warned) {
+            (window as any).__eshuttle_listener_perm_warned = true;
+            console.info('Firestore activity logs listener using local cache fallback.');
+          }
+        } else {
+          console.warn('Firestore activity logs listener fallback to local:', err);
+        }
         if (!isUnsubscribed) {
           callback(getLocalActivityLogs());
         }
