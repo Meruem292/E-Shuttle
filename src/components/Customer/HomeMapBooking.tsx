@@ -40,32 +40,6 @@ import { useBackHandler } from '../../contexts/NativeBackContext';
 import { useAppLogo, markLogoUrlAsFailed, officialLogoFallback } from '../../services/logoService';
 import { sanitizeVehicleInfo } from '../../utils/sanitizeVehicle';
 
-const EShuttleTrikeIllustration: React.FC<{ className?: string }> = ({ className = 'w-16 h-12 text-white' }) => (
-  <svg className={className} viewBox="0 0 120 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* Roof Canopy */}
-    <path d="M15 20 C 35 12, 85 12, 105 20 L 105 28 L 15 28 Z" fill="currentColor" fillOpacity="0.2" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round" />
-    {/* Frame Pillars */}
-    <path d="M22 28 L 20 54" stroke="currentColor" strokeWidth="2.5" />
-    <path d="M55 28 L 55 54" stroke="currentColor" strokeWidth="2.5" />
-    <path d="M98 28 L 100 54" stroke="currentColor" strokeWidth="2.5" />
-    {/* Seats */}
-    <path d="M28 42 L 48 42 L 48 54" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M62 42 L 82 42 L 82 54" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-    {/* Handlebar & Front Shield */}
-    <path d="M96 36 L 102 36 L 106 50" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-    {/* Passenger Body Frame */}
-    <path d="M15 54 L 105 54 C 108 54, 110 58, 106 62 L 12 62 Z" fill="currentColor" fillOpacity="0.15" stroke="currentColor" strokeWidth="2" />
-    {/* Back & Front Wheels */}
-    <circle cx="32" cy="62" r="9" fill="white" stroke="currentColor" strokeWidth="3" />
-    <circle cx="32" cy="62" r="3" fill="currentColor" />
-    <circle cx="88" cy="62" r="9" fill="white" stroke="currentColor" strokeWidth="3" />
-    <circle cx="88" cy="62" r="3" fill="currentColor" />
-    {/* Side E-Shuttle badge */}
-    <rect x="58" y="46" width="14" height="6" rx="2" fill="white" />
-    <text x="65" y="51" fill="#0D47A1" fontSize="4" fontWeight="bold" textAnchor="middle">E</text>
-  </svg>
-);
-
 export const HomeMapBooking: React.FC = () => {
   const { userProfile, currentUser } = useAuth();
   const { logoUrl: appLogo } = useAppLogo();
@@ -928,15 +902,25 @@ export const HomeMapBooking: React.FC = () => {
                     <div
                       key={z.id}
                       onClick={() => handleSelectZone(z.id)}
-                      className="group relative bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-[26px] p-4 sm:p-5 flex items-center justify-between shadow-xl hover:shadow-2xl active:scale-[0.98] transition-all cursor-pointer border-2 border-[#0D47A1] overflow-hidden"
+                      style={{ height: '100px' }}
+                      className="group relative h-[100px] bg-[#0D47A1] hover:bg-[#1565C0] text-white rounded-[26px] p-4 sm:p-5 flex items-center justify-between shadow-xl hover:shadow-2xl active:scale-[0.98] transition-all cursor-pointer border-2 border-[#0D47A1] overflow-hidden"
                     >
                       {/* Background subtle shine */}
                       <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-gradient-to-l from-white/10 to-transparent pointer-events-none" />
 
-                      {/* Left: Shuttle Graphic & Details */}
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className="w-16 h-12 shrink-0 flex items-center justify-center">
-                          <EShuttleTrikeIllustration className="w-16 h-12 text-white" />
+                      {/* Left: Official Logo & Details */}
+                      <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                        <div className="w-16 h-16 sm:w-[72px] sm:h-[72px] shrink-0 rounded-2xl bg-white p-0.5 flex items-center justify-center shadow-md border border-white/50 overflow-hidden">
+                          <img
+                            src={appLogo}
+                            referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              markLogoUrlAsFailed(appLogo);
+                              (e.target as HTMLImageElement).src = officialLogoFallback;
+                            }}
+                            alt="E-Shuttle Official Logo"
+                            className="w-full h-full object-cover rounded-[14px]"
+                          />
                         </div>
 
                         {/* Zone details */}
@@ -952,7 +936,7 @@ export const HomeMapBooking: React.FC = () => {
                             )}
                           </div>
                           <p className="text-blue-100 font-medium text-xs flex items-center gap-1 mt-1 italic">
-                            <span>See available E-shuttle</span>
+                            <span className="text-[10px]" style={{ fontSize: '10px' }}>See available E-shuttle</span>
                             <span className="text-[10px] font-mono not-italic bg-white/20 px-1.5 py-0.2 rounded font-extrabold text-white">
                               ({stationCount} stops)
                             </span>
